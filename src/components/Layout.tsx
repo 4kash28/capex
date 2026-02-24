@@ -37,13 +37,14 @@ const NavItem: React.FC<NavItemProps> = ({ icon: Icon, label, active, onClick })
   </button>
 );
 
-export default function Layout({ children, activePage, setActivePage, isAdmin, userEmail, onLogout }: { 
+export default function Layout({ children, activePage, setActivePage, isAdmin, userEmail, onLogout, isOffline }: { 
   children: React.ReactNode;
   activePage: string;
   setActivePage: (page: string) => void;
   isAdmin: boolean;
   userEmail?: string;
   onLogout: () => void;
+  isOffline?: boolean;
 }) {
   const [isMobile, setIsMobile] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -58,21 +59,29 @@ export default function Layout({ children, activePage, setActivePage, isAdmin, u
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  const checkConnection = async () => {
+    if (isOffline) {
+      setIsSupabaseConnected(false);
+      return;
+    }
+    
+    if (!supabase) {
+      setIsSupabaseConnected(false);
+      return;
+    }
+    try {
+      const { error } = await supabase.from('vendors').select('id').limit(1);
+      setIsSupabaseConnected(!error);
+      if (error) console.error('Supabase connection check failed:', error);
+    } catch (e) {
+      console.error('Supabase connection check exception:', e);
+      setIsSupabaseConnected(false);
+    }
+  };
+
   useEffect(() => {
-    const checkConnection = async () => {
-      if (!supabase) {
-        setIsSupabaseConnected(false);
-        return;
-      }
-      try {
-        const { error } = await supabase.from('vendors').select('id').limit(1);
-        setIsSupabaseConnected(!error);
-      } catch (e) {
-        setIsSupabaseConnected(false);
-      }
-    };
     checkConnection();
-  }, []);
+  }, [isOffline]);
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -94,10 +103,21 @@ export default function Layout({ children, activePage, setActivePage, isAdmin, u
               <span className="font-bold text-lg tracking-tight hidden sm:block">SmartCapex</span>
               <div 
                 className={cn(
-                  "w-2.5 h-2.5 rounded-full ml-2",
-                  isSupabaseConnected ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" : "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]"
+                  "w-2.5 h-2.5 rounded-full ml-2 cursor-pointer transition-all hover:scale-125",
+                  isOffline 
+                    ? "bg-slate-400 shadow-[0_0_8px_rgba(148,163,184,0.8)]" 
+                    : isSupabaseConnected 
+                      ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" 
+                      : "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)] animate-pulse"
                 )}
-                title={isSupabaseConnected ? "Connected to Supabase" : "Not connected to Supabase"}
+                title={
+                  isOffline 
+                    ? "Offline Mode (Local Storage)" 
+                    : isSupabaseConnected 
+                      ? "Connected to Supabase (Click to refresh)" 
+                      : "Not connected to Supabase (Click to retry)"
+                }
+                onClick={checkConnection}
               />
             </div>
 

@@ -13,6 +13,7 @@ import BillingManagement from './components/BillingManagement';
 import Reports from './components/Reports';
 import VendorManagement from './components/VendorManagement';
 import Login from './components/Login';
+import { localDB } from './lib/localDB';
 import { 
   Vendor, 
   Department, 
@@ -23,24 +24,14 @@ import {
 import { startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { AlertCircle, Settings as SettingsIcon } from 'lucide-react';
 
-const MOCK_VENDORS: Vendor[] = [
-  { id: '1', name: 'Dell Technologies', service_type: 'IT Hardware', contact_person: 'John Doe', email: 'john@dell.com' },
-  { id: '2', name: 'Amazon Web Services', service_type: 'Cloud Services', contact_person: 'Jane Smith', email: 'jane@aws.com' },
-  { id: '3', name: 'Local Infrastructure Co', service_type: 'Construction', contact_person: 'Bob Wilson' },
-];
-
-const MOCK_DEPARTMENTS: Department[] = [
-  { id: '1', name: 'IT' },
-  { id: '2', name: 'Finance' },
-  { id: '3', name: 'Operations' },
-];
-
+const MOCK_VENDORS: Vendor[] = []; // Removed mock data as we use localDB now
+const MOCK_DEPARTMENTS: Department[] = [];
 const MOCK_CAPEX: CapexEntry[] = [];
-
 const MOCK_BILLING: BillingRecord[] = [];
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
   const [activePage, setActivePage] = useState('dashboard');
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [billingVendors, setBillingVendors] = useState<Vendor[]>([
@@ -72,11 +63,13 @@ export default function App() {
   const [monthlyLimit, setMonthlyLimit] = useState(0);
   const [billingTotalBudget, setBillingTotalBudget] = useState(0);
   const [billingMonthlyLimit, setBillingMonthlyLimit] = useState(0);
+  const [sessionChecked, setSessionChecked] = useState(false);
 
   useEffect(() => {
     if (isSupabaseConfigured) {
       supabase!.auth.getSession().then(({ data: { session } }) => {
         setSession(session);
+        setSessionChecked(true);
       });
 
       const {
@@ -91,11 +84,15 @@ export default function App() {
       if (localSession) {
         setSession({ user: { email: localSession } } as any);
       }
+      setSessionChecked(true);
     }
   }, []);
 
   const handleLogout = async () => {
-    if (isSupabaseConfigured) {
+    if (isOffline) {
+      setIsOffline(false);
+      setSession(null);
+    } else if (isSupabaseConfigured) {
       await supabase!.auth.signOut();
     } else {
       localStorage.removeItem('local_session');
@@ -150,19 +147,53 @@ export default function App() {
   }, []);
 
   const fetchData = useCallback(async () => {
-    if (!isSupabaseConfigured) {
-      setVendors(MOCK_VENDORS);
-      setDepartments(MOCK_DEPARTMENTS);
-      setCapexEntries(MOCK_CAPEX);
-      setBillingRecords(MOCK_BILLING);
-      setBillingTotalBudget(1200000);
-      setBillingMonthlyLimit(100000);
-      calculateStats(MOCK_CAPEX, MOCK_BILLING, totalBudget, monthlyLimit, 1200000, 100000);
-      setLoading(false);
+    if (!sessionChecked && !isOffline) return;
+
+    setLoading(true);
+
+    if (isOffline || !isSupabaseConfigured) {
+      try {
+        await localDB.initMockData();
+        const vendors = await localDB.getAll<Vendor>('vendors');
+        const departments = await localDB.getAll<Department>('departments');
+        const capex = await localDB.getAll<CapexEntry>('capex_entries');
+        const billing = await localDB.getAll<BillingRecord>('billing_records');
+        const settings = await localDB.getAll<{key: string, value: string}>('settings');
+
+        setVendors(vendors);
+        setDepartments(departments);
+        setCapexEntries(capex.sort((a, b) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime()));
+        setBillingRecords(billing.sort((a, b) => new Date(b.bill_date).getTime() - new Date(a.bill_date).getTime()));
+
+        let currentBudget = 0;
+        let currentLimit = 0;
+        let bBudget = 0;
+        let bLimit = 0;
+
+        const budget = settings.find(s => s.key === 'total_capex_budget');
+        const limit = settings.find(s => s.key === 'monthly_capex_limit');
+        const billingBudget = settings.find(s => s.key === 'total_billing_budget');
+        const billingLimit = settings.find(s => s.key === 'monthly_billing_limit');
+
+        if (budget) currentBudget = Number(budget.value);
+        if (limit) currentLimit = Number(limit.value);
+        if (billingBudget) bBudget = Number(billingBudget.value);
+        if (billingLimit) bLimit = Number(billingLimit.value);
+
+        setTotalBudget(currentBudget);
+        setMonthlyLimit(currentLimit);
+        setBillingTotalBudget(bBudget);
+        setBillingMonthlyLimit(bLimit);
+        calculateStats(capex, billing, currentBudget, currentLimit, bBudget, bLimit);
+      } catch (error) {
+        console.error('Error fetching from LocalDB:', error);
+        alert('Failed to load local data.');
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 
-    setLoading(true);
     try {
       const [vRes, dRes, cRes, bRes, sRes] = await Promise.all([
         supabase.from('vendors').select('*').order('name'),
@@ -179,7 +210,16 @@ export default function App() {
       if (sRes.error) console.error('Settings fetch error:', sRes.error);
 
       if (vRes.error || dRes.error || cRes.error || bRes.error) {
-        alert('Failed to fetch data from Supabase. Please check your database schema and RLS policies.');
+        const errorMsg = vRes.error?.message || dRes.error?.message || cRes.error?.message || bRes.error?.message;
+        console.error('Full error details:', { vRes, dRes, cRes, bRes });
+        
+        if (errorMsg && errorMsg !== 'Failed to fetch') {
+           if (errorMsg.includes('permission') || errorMsg.includes('does not exist')) {
+             alert(`Database Error: ${errorMsg}. Please check your schema and policies.`);
+           } else {
+             console.warn('Data fetch warning:', errorMsg);
+           }
+        }
       }
 
       if (vRes.data) setVendors(vRes.data);
@@ -215,13 +255,11 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [calculateStats, totalBudget, monthlyLimit]);
+  }, [calculateStats, totalBudget, monthlyLimit, sessionChecked, isOffline]);
 
   useEffect(() => {
-    console.log('Supabase Configured:', isSupabaseConfigured);
-    console.log('Supabase URL:', import.meta.env.VITE_SUPABASE_URL);
     fetchData();
-  }, []); // Initial fetch only
+  }, [fetchData]); // Use fetchData as dependency
 
   // Recalculate stats whenever entries or limits change
   useEffect(() => {
@@ -230,7 +268,7 @@ export default function App() {
 
   const handleAddCapex = async (data: any) => {
     let newEntries = [...capexEntries];
-    if (!isSupabaseConfigured) {
+    if (isOffline || !isSupabaseConfigured) {
       const vendor = vendors.find(v => v.id === data.vendor_id);
       const department = departments.find(d => d.id === data.department_id);
       const newEntry = { 
@@ -239,13 +277,13 @@ export default function App() {
         vendor, 
         department 
       };
-      newEntries = [newEntry, ...capexEntries];
-      setCapexEntries(newEntries);
+      await localDB.add('capex_entries', newEntry);
+      await fetchData();
+      newEntries = [newEntry, ...capexEntries]; // Optimistic update
     } else {
       const { error } = await supabase.from('capex_entries').insert([data]);
       if (error) throw error;
       await fetchData();
-      // Refetch to get updated entries for limit check
       const { data: cRes } = await supabase.from('capex_entries').select('*');
       if (cRes) newEntries = cRes;
     }
@@ -270,8 +308,12 @@ export default function App() {
   };
 
   const handleUpdateBillingStatus = async (id: string, status: 'Paid' | 'Pending' | 'PO Pending') => {
-    if (!isSupabaseConfigured) {
-      setBillingRecords(billingRecords.map(r => r.id === id ? { ...r, payment_status: status } : r));
+    if (isOffline || !isSupabaseConfigured) {
+      const record = billingRecords.find(r => r.id === id);
+      if (record) {
+        await localDB.update('billing_records', { ...record, payment_status: status });
+        await fetchData();
+      }
       return;
     }
     const { error } = await supabase
@@ -283,8 +325,9 @@ export default function App() {
   };
 
   const handleAddVendor = async (vendor: Partial<Vendor>) => {
-    if (!isSupabaseConfigured) {
-      setVendors([...vendors, { ...vendor, id: Math.random().toString() } as Vendor]);
+    if (isOffline || !isSupabaseConfigured) {
+      await localDB.add('vendors', { ...vendor, id: Math.random().toString() } as Vendor);
+      await fetchData();
       return;
     }
     const { error } = await supabase.from('vendors').insert([vendor]);
@@ -294,8 +337,9 @@ export default function App() {
 
   const handleDeleteVendor = async (id: string) => {
     if (!confirm('Are you sure you want to delete this vendor?')) return;
-    if (!isSupabaseConfigured) {
-      setVendors(vendors.filter(v => v.id !== id));
+    if (isOffline || !isSupabaseConfigured) {
+      await localDB.delete('vendors', id);
+      await fetchData();
       return;
     }
     const { error } = await supabase.from('vendors').delete().eq('id', id);
@@ -343,11 +387,12 @@ export default function App() {
   }, []);
 
   const handleUpdateSettings = async (newBudget: number, newLimit: number, newBBudget: number, newBLimit: number) => {
-    if (!isSupabaseConfigured) {
-      setTotalBudget(newBudget);
-      setMonthlyLimit(newLimit);
-      setBillingTotalBudget(newBBudget);
-      setBillingMonthlyLimit(newBLimit);
+    if (isOffline || !isSupabaseConfigured) {
+      await localDB.update('settings', { key: 'total_capex_budget', value: newBudget.toString() });
+      await localDB.update('settings', { key: 'monthly_capex_limit', value: newLimit.toString() });
+      await localDB.update('settings', { key: 'total_billing_budget', value: newBBudget.toString() });
+      await localDB.update('settings', { key: 'monthly_billing_limit', value: newBLimit.toString() });
+      await fetchData();
       alert('Settings updated locally!');
       return;
     }
@@ -370,20 +415,20 @@ export default function App() {
 
   const handleAddBillingRecord = async (data: any) => {
     let newRecords = [...billingRecords];
-    if (!isSupabaseConfigured) {
+    if (isOffline || !isSupabaseConfigured) {
       const vendor = vendors.find(v => v.id === data.vendor_id);
       const newRecord = { 
         ...data, 
         id: Math.random().toString(), 
         vendor 
       };
+      await localDB.add('billing_records', newRecord);
+      await fetchData();
       newRecords = [newRecord, ...billingRecords];
-      setBillingRecords(newRecords);
     } else {
       const { error } = await supabase.from('billing_records').insert([data]);
       if (error) throw error;
       await fetchData();
-      // Refetch to get updated records for limit check
       const { data: bRes } = await supabase.from('billing_records').select('*');
       if (bRes) newRecords = bRes;
     }
@@ -526,24 +571,31 @@ export default function App() {
     }
   };
 
-  if (!session) {
-    return <Login onLogin={() => {
-      if (!isSupabaseConfigured) {
-        localStorage.setItem('local_session', 'admin@example.com');
-        setSession({ user: { email: 'admin@example.com' } } as any);
-      }
-    }} />;
+  if (!session && !isOffline) {
+    return <Login 
+      onLogin={() => {
+        if (!isSupabaseConfigured) {
+          localStorage.setItem('local_session', 'admin@example.com');
+          setSession({ user: { email: 'admin@example.com' } } as any);
+        }
+      }} 
+      onOfflineLogin={() => {
+        setIsOffline(true);
+        setSession({ user: { email: 'offline@local' } } as any);
+      }}
+    />;
   }
 
-  const isAdmin = session?.user?.email?.includes('admin') || false;
+  const isAdmin = session?.user?.email?.includes('admin') || isOffline; // Offline user is admin
 
   return (
     <Layout 
       activePage={activePage} 
       setActivePage={setActivePage} 
       isAdmin={isAdmin} 
-      userEmail={session.user.email}
+      userEmail={isOffline ? 'Offline Mode' : session?.user.email}
       onLogout={handleLogout}
+      isOffline={isOffline}
     >
       {renderPage(isAdmin)}
     </Layout>
