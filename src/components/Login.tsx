@@ -2,20 +2,18 @@ import React, { useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Lock, Mail, AlertCircle } from 'lucide-react';
 
-export default function Login({ onLogin, onOfflineLogin }: { onLogin: () => void, onOfflineLogin: () => void }) {
+export default function Login({ onLogin, onOfflineLogin }: { onLogin: (email: string) => void, onOfflineLogin: () => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [isSignUp, setIsSignUp] = useState(false);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isSupabaseConfigured) {
       // Fallback for local dev without Supabase
       if (email && password) {
-        onLogin();
+        onLogin(email);
       } else {
         setError('Please enter email and password');
       }
@@ -31,33 +29,16 @@ export default function Login({ onLogin, onOfflineLogin }: { onLogin: () => void
     setError(null);
 
     try {
-      let error;
-      if (isSignUp) {
-        const { error: signUpError } = await supabase!.auth.signUp({
-          email,
-          password,
-        });
-        error = signUpError;
-        if (!error) {
-          alert('Check your email for the confirmation link!');
-          setIsSignUp(false); // Switch back to login
-        }
-      } else {
-        const { error: signInError } = await supabase!.auth.signInWithPassword({
-          email,
-          password,
-        });
-        error = signInError;
-        if (!error) {
-          onLogin();
-        }
-      }
-
-      if (error) throw error;
+      const { error: signInError } = await supabase!.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (signInError) throw signInError;
+      onLogin(email);
     } catch (err: any) {
       console.error('Auth error:', err);
-      if (err.message === 'Failed to fetch') {
-        setError('Network error: Unable to connect to the server. Please check your internet connection or try again later.');
+      if (err.message === 'Failed to fetch' || err.message.includes('Failed to fetch')) {
+        setError('Network error: Unable to connect to Supabase. The project might be paused or unreachable. Please use "Continue in Offline Mode" below.');
       } else {
         setError(err.message);
       }
@@ -73,9 +54,9 @@ export default function Login({ onLogin, onOfflineLogin }: { onLogin: () => void
           <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center font-bold text-4xl text-white mx-auto mb-4 shadow-lg">
             S
           </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">SmartCapex</h1>
+          <h1 className="text-2xl font-bold text-white tracking-tight">ITBMS</h1>
           <p className="text-blue-200 text-sm mt-2">
-            {isSignUp ? 'Create an account to get started' : 'Sign in to manage your expenditures'}
+            Sign in to manage your expenditures
           </p>
         </div>
         
@@ -125,21 +106,10 @@ export default function Login({ onLogin, onOfflineLogin }: { onLogin: () => void
             disabled={loading}
             className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-600/20"
           >
-            {loading ? (isSignUp ? 'Creating Account...' : 'Signing in...') : (isSignUp ? 'Create Account' : 'Sign In')}
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
 
           <div className="text-center space-y-4">
-            <button
-              type="button"
-              onClick={() => {
-                setIsSignUp(!isSignUp);
-                setError(null);
-              }}
-              className="text-sm text-blue-600 hover:text-blue-800 font-medium block w-full"
-            >
-              {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
-            </button>
-            
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-slate-200"></div>

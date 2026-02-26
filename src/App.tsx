@@ -12,6 +12,8 @@ import CapexEntryForm from './components/CapexEntryForm';
 import BillingManagement from './components/BillingManagement';
 import Reports from './components/Reports';
 import VendorManagement from './components/VendorManagement';
+import VendorDashboard from './components/VendorDashboard';
+import SecurityDashboard from './components/SecurityDashboard';
 import Login from './components/Login';
 import { localDB } from './lib/localDB';
 import { 
@@ -19,7 +21,9 @@ import {
   Department, 
   CapexEntry, 
   BillingRecord, 
-  DashboardStats 
+  DashboardStats,
+  UserRole,
+  AppNotification
 } from './types';
 import { startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { AlertCircle, Settings as SettingsIcon } from 'lucide-react';
@@ -64,11 +68,31 @@ export default function App() {
   const [billingTotalBudget, setBillingTotalBudget] = useState(0);
   const [billingMonthlyLimit, setBillingMonthlyLimit] = useState(0);
   const [sessionChecked, setSessionChecked] = useState(false);
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   useEffect(() => {
     if (isSupabaseConfigured) {
-      supabase!.auth.getSession().then(({ data: { session } }) => {
-        setSession(session);
+      supabase!.auth.getSession().then(({ data: { session }, error }) => {
+        if (error) {
+          console.error('Auth error:', error);
+          // Fallback to offline mode on auth fetch failure
+          setIsOffline(true);
+          const localSession = localStorage.getItem('local_session');
+          if (localSession) {
+            setSession({ user: { email: localSession } } as any);
+          }
+        } else {
+          setSession(session);
+        }
+        setSessionChecked(true);
+      }).catch(err => {
+        console.error('Auth fetch exception:', err);
+        setIsOffline(true);
+        const localSession = localStorage.getItem('local_session');
+        if (localSession) {
+          setSession({ user: { email: localSession } } as any);
+        }
         setSessionChecked(true);
       });
 
@@ -87,6 +111,90 @@ export default function App() {
       setSessionChecked(true);
     }
   }, []);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (session?.user?.email) {
+        if (isSupabaseConfigured) {
+          try {
+            const { data, error } = await supabase!
+              .from('user_profiles')
+              .select('*')
+              .eq('id', session.user.email)
+              .single();
+            
+            if (data) {
+              setUserProfile(data);
+              return;
+            }
+            if (error && error.code !== 'PGRST116' && error.code !== 'PGRST205') {
+              console.error('Error fetching Supabase profile:', error);
+            }
+          } catch (e) {
+            // Silent catch for missing table
+          }
+        }
+
+        // Fallback to localDB
+        await localDB.initMockData();
+        const profiles = await localDB.getAll<any>('user_profiles');
+        const profile = profiles.find(p => p.id === session.user.email);
+        setUserProfile(profile || { id: session.user.email, role: 'user', name: 'User' });
+      } else {
+        setUserProfile(null);
+      }
+    };
+    fetchProfile();
+  }, [session]);
+
+  const fetchNotifications = useCallback(async () => {
+    let notes: AppNotification[] = [];
+    try {
+      if (isOffline || !isSupabaseConfigured) {
+        notes = await localDB.getAll<AppNotification>('notifications');
+      } else {
+        const { data, error } = await supabase.from('notifications').select('*');
+        if (error) {
+          if (error.code !== 'PGRST205') console.error('Error fetching notifications:', error);
+          notes = await localDB.getAll<AppNotification>('notifications');
+        } else {
+          notes = data || [];
+        }
+      }
+
+      // If still empty, add some mock data for better UX
+      if (notes.length === 0) {
+        notes = [
+          {
+            id: 'mock-1',
+            message: 'System initialized and ready for updates.',
+            type: 'info',
+            created_at: new Date(Date.now() - 3600000).toISOString(),
+            read: true
+          },
+          {
+            id: 'mock-2',
+            message: 'Vendor Portal is now active for all assigned vendors.',
+            type: 'success',
+            created_at: new Date(Date.now() - 7200000).toISOString(),
+            read: true
+          }
+        ];
+      }
+    } catch (e) {
+      console.error('Notification fetch failed:', e);
+    }
+    
+    setNotifications(notes.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+  }, [isOffline]);
+
+  useEffect(() => {
+    fetchNotifications();
+    
+    // Faster polling for real-time feel (2 seconds)
+    const interval = setInterval(fetchNotifications, 2000);
+    return () => clearInterval(interval);
+  }, [fetchNotifications]);
 
   const handleLogout = async () => {
     if (isOffline) {
@@ -219,6 +327,10 @@ export default function App() {
            } else {
              console.warn('Data fetch warning:', errorMsg);
            }
+        } else if (errorMsg === 'Failed to fetch' || errorMsg?.includes('Failed to fetch')) {
+           console.warn('Network error fetching from Supabase. Falling back to local data.');
+           setIsOffline(true);
+           return; // The useEffect will re-trigger fetchData with isOffline=true
         }
       }
 
@@ -250,8 +362,12 @@ export default function App() {
       setBillingMonthlyLimit(bLimit);
       calculateStats(cRes.data || [], bRes.data || [], currentBudget, currentLimit, bBudget, bLimit);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching data:', error);
+      if (error.message === 'Failed to fetch' || error.message?.includes('Failed to fetch')) {
+        console.warn('Network error fetching from Supabase. Falling back to local data.');
+        setIsOffline(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -275,13 +391,24 @@ export default function App() {
         ...data, 
         id: Math.random().toString(), 
         vendor, 
-        department 
+        department
       };
       await localDB.add('capex_entries', newEntry);
       await fetchData();
       newEntries = [newEntry, ...capexEntries]; // Optimistic update
     } else {
-      const { error } = await supabase.from('capex_entries').insert([data]);
+      // Strip fields that might not exist in Supabase schema to prevent errors
+      const { manual_department_name, manual_vendor_name, ...supabaseData } = data;
+      
+      // If there's a manual name, we can append it to remarks so it's not lost
+      if (manual_department_name) {
+        supabaseData.remarks = (supabaseData.remarks ? supabaseData.remarks + " | " : "") + `Dept: ${manual_department_name}`;
+      }
+      if (manual_vendor_name) {
+        supabaseData.remarks = (supabaseData.remarks ? supabaseData.remarks + " | " : "") + `Vendor: ${manual_vendor_name}`;
+      }
+
+      const { error } = await supabase.from('capex_entries').insert([supabaseData]);
       if (error) throw error;
       await fetchData();
       const { data: cRes } = await supabase.from('capex_entries').select('*');
@@ -322,6 +449,83 @@ export default function App() {
       .eq('id', id);
     if (error) throw error;
     await fetchData();
+  };
+
+  const handleUpdateInvoiceStatus = async (entryId: string, status: CapexEntry['invoice_status'], vendorRemarks?: string) => {
+    const entry = capexEntries.find(e => e.id === entryId);
+    
+    let finalRemarks = entry?.remarks || '';
+    if (vendorRemarks) {
+      const timestamp = new Date().toLocaleString();
+      finalRemarks = (finalRemarks ? finalRemarks + "\n\n" : "") + `[Vendor Update ${timestamp}]: ${vendorRemarks}`;
+    }
+
+    if (entry) {
+      const updatedEntry = { 
+        ...entry, 
+        invoice_status: status,
+        remarks: finalRemarks,
+        invoice_generated_at: status === 'generated' ? new Date().toISOString() : entry.invoice_generated_at,
+        invoice_mailed_at: status === 'mailed' ? new Date().toISOString() : entry.invoice_mailed_at,
+        bill_inwarded_at: status === 'inwarded' ? new Date().toISOString() : entry.bill_inwarded_at,
+      };
+
+      if (isOffline || !isSupabaseConfigured) {
+        await localDB.update('capex_entries', updatedEntry);
+      } else {
+        const { error } = await supabase.from('capex_entries').update({
+          invoice_status: status,
+          remarks: finalRemarks,
+          invoice_generated_at: updatedEntry.invoice_generated_at,
+          invoice_mailed_at: updatedEntry.invoice_mailed_at,
+          bill_inwarded_at: updatedEntry.bill_inwarded_at
+        }).eq('id', entryId);
+        if (error) throw error;
+      }
+    }
+    
+    await fetchData();
+
+    // Create notification
+    let message = '';
+    const vendorName = entry?.vendor?.name || userProfile?.name || 'Vendor';
+    const projectDesc = entry?.description || 'General Update';
+
+    if (status === 'generated') message = `Vendor ${vendorName} has generated an invoice for ${projectDesc}.`;
+    if (status === 'mailed') message = `Vendor ${vendorName} has mailed the invoice for ${projectDesc}.`;
+    if (status === 'inwarded') message = `Security has inwarded the bill for ${projectDesc}.`;
+    if (status === 'delayed') message = `Vendor ${vendorName} reported a DELAY in generating invoice for ${projectDesc}.`;
+    if (status === 'issue') {
+      if (userProfile?.role === 'security') {
+        message = `Security reported an INWARD ISSUE for ${projectDesc}.`;
+      } else {
+        message = `Vendor ${vendorName} reported an ISSUE with ${projectDesc}.`;
+      }
+    }
+
+    if (vendorRemarks && message) {
+      message += ` | Remark: ${vendorRemarks}`;
+    }
+
+    const notification: AppNotification = {
+      id: Math.random().toString(),
+      message,
+      type: status === 'issue' || status === 'delayed' ? 'warning' : 'info',
+      created_at: new Date().toISOString(),
+      read: false
+    };
+    
+    if (isOffline || !isSupabaseConfigured) {
+      await localDB.add('notifications', notification);
+    } else {
+      const { error: nError } = await supabase.from('notifications').insert([notification]);
+      if (nError) {
+        console.warn('Could not save notification to Supabase. Fallback to local.', nError.message);
+        await localDB.add('notifications', notification);
+      }
+    }
+
+    await fetchNotifications();
   };
 
   const handleAddVendor = async (vendor: Partial<Vendor>) => {
@@ -426,7 +630,14 @@ export default function App() {
       await fetchData();
       newRecords = [newRecord, ...billingRecords];
     } else {
-      const { error } = await supabase.from('billing_records').insert([data]);
+      // Strip fields that might not exist in Supabase schema
+      const { manual_vendor_name, ...supabaseData } = data;
+      
+      if (manual_vendor_name) {
+        supabaseData.remarks = (supabaseData.remarks ? supabaseData.remarks + " | " : "") + `Vendor: ${manual_vendor_name}`;
+      }
+
+      const { error } = await supabase.from('billing_records').insert([supabaseData]);
       if (error) throw error;
       await fetchData();
       const { data: bRes } = await supabase.from('billing_records').select('*');
@@ -453,6 +664,17 @@ export default function App() {
   };
 
   const renderPage = (isAdmin: boolean) => {
+    if (userProfile?.role === 'vendor') {
+      const vendorEntries = userProfile.vendor_id 
+        ? capexEntries.filter(e => e.vendor_id === userProfile.vendor_id)
+        : capexEntries;
+      return <VendorDashboard entries={vendorEntries} onUpdateStatus={handleUpdateInvoiceStatus} notifications={notifications} />;
+    }
+
+    if (userProfile?.role === 'security') {
+      return <SecurityDashboard entries={capexEntries} onInward={handleUpdateInvoiceStatus} notifications={notifications} />;
+    }
+
     if (loading) {
       return (
         <div className="flex items-center justify-center h-64">
@@ -471,6 +693,7 @@ export default function App() {
             vendorData={vendorChartData} 
             capexEntries={capexEntries}
             onReview={() => setActivePage('alerts')}
+            notifications={notifications}
           />
         );
       case 'capex':
@@ -566,6 +789,7 @@ export default function App() {
             vendorData={vendorChartData} 
             capexEntries={capexEntries}
             onReview={() => setActivePage('alerts')}
+            notifications={notifications}
           />
         );
     }
@@ -573,11 +797,9 @@ export default function App() {
 
   if (!session && !isOffline) {
     return <Login 
-      onLogin={() => {
-        if (!isSupabaseConfigured) {
-          localStorage.setItem('local_session', 'admin@example.com');
-          setSession({ user: { email: 'admin@example.com' } } as any);
-        }
+      onLogin={(email) => {
+        localStorage.setItem('local_session', email);
+        setSession({ user: { email: email } } as any);
       }} 
       onOfflineLogin={() => {
         setIsOffline(true);
@@ -596,6 +818,8 @@ export default function App() {
       userEmail={isOffline ? 'Offline Mode' : session?.user.email}
       onLogout={handleLogout}
       isOffline={isOffline}
+      userProfile={userProfile}
+      notifications={notifications}
     >
       {renderPage(isAdmin)}
     </Layout>

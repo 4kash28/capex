@@ -25,10 +25,11 @@ import {
 } from 'recharts';
 import { motion } from 'motion/react';
 import { formatCurrency, formatCurrencyPDF, cn, formatDate } from '../lib/utils';
-import { DashboardStats } from '../types';
+import { DashboardStats, AppNotification } from '../types';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { Bell, Clock } from 'lucide-react';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
@@ -63,13 +64,14 @@ const StatCard = ({ title, value, icon: Icon, trend, trendValue, color, alert }:
   </div>
 );
 
-export default function Dashboard({ stats, monthlyData, quarterlyData, vendorData, capexEntries, onReview }: { 
+export default function Dashboard({ stats, monthlyData, quarterlyData, vendorData, capexEntries, onReview, notifications = [] }: { 
   stats: DashboardStats;
   monthlyData: any[];
   quarterlyData: any[];
   vendorData: any[];
   capexEntries: any[];
   onReview: () => void;
+  notifications?: AppNotification[];
 }) {
   const [chartView, setChartView] = React.useState<'monthly' | 'quarterly'>('monthly');
   const usagePercent = stats.totalBudget > 0 ? (stats.totalConsumed / stats.totalBudget) * 100 : 0;
@@ -90,7 +92,7 @@ export default function Dashboard({ stats, monthlyData, quarterlyData, vendorDat
         Year: new Date(item.entry_date).getFullYear().toString(),
         Vendor: item.vendor?.name || item.manual_vendor_name || 'N/A',
         Category: item.category,
-        Department: item.department?.name || 'N/A',
+        Department: item.department?.name || item.manual_department_name || 'N/A',
         Amount: item.amount,
         Description: item.description
       }));
@@ -453,6 +455,78 @@ export default function Dashboard({ stats, monthlyData, quarterlyData, vendorDat
                 <Legend verticalAlign="bottom" height={36} iconType="rect" wrapperStyle={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase' }} />
               </PieChart>
             </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* Activity and Recent Entries */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Recent Activity / Logs */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden h-fit">
+          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div className="flex items-center gap-2">
+              <Bell className="w-4 h-4 text-blue-600" />
+              <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-widest">Recent Activity Logs</h4>
+            </div>
+          </div>
+          <div className="p-0 max-h-[400px] overflow-y-auto">
+            {notifications.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest">No activity recorded</div>
+            ) : (
+              <div className="divide-y divide-slate-50">
+                {notifications.slice(0, 15).map((note) => (
+                  <div key={note.id} className="p-4 hover:bg-slate-50 transition-colors">
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 p-1 bg-blue-50 rounded text-blue-600">
+                        <Clock className="w-3 h-3" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-800 font-medium leading-relaxed">{note.message}</p>
+                        <span className="text-[10px] text-slate-400 font-bold mt-1 block">
+                          {new Date(note.created_at).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Recent Entries Table */}
+        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden h-fit">
+          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Recent Capex Entries</h4>
+            <span className="text-[8px] font-black text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded uppercase tracking-widest">
+              {capexEntries.length} Total
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Date</th>
+                  <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Vendor</th>
+                  <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Department</th>
+                  <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Category</th>
+                  <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {capexEntries.length === 0 ? (
+                  <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">No entries found</td></tr>
+                ) : capexEntries.slice(0, 10).map((item, i) => (
+                  <tr key={i} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-4 py-3 text-xs text-slate-600 font-bold whitespace-nowrap">{formatDate(item.entry_date)}</td>
+                    <td className="px-4 py-3 text-xs font-black text-slate-900">{item.vendor?.name || item.manual_vendor_name || 'N/A'}</td>
+                    <td className="px-4 py-3 text-xs text-slate-600 font-bold">{item.department?.name || item.manual_department_name || 'N/A'}</td>
+                    <td className="px-4 py-3 text-xs text-slate-600">{item.category}</td>
+                    <td className="px-4 py-3 text-xs font-black text-slate-900 text-right whitespace-nowrap">{formatCurrency(item.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>

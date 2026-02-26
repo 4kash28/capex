@@ -8,6 +8,7 @@ import { Vendor, Department } from '../types';
 const capexSchema = z.object({
   vendor_id: z.string().min(1, 'Vendor is required'),
   department_id: z.string().min(1, 'Department is required'),
+  manual_department_name: z.string().optional(),
   category: z.string().min(1, 'Category is required'),
   manual_category: z.string().optional(),
   description: z.string().min(5, 'Description must be at least 5 characters'),
@@ -22,6 +23,14 @@ const capexSchema = z.object({
 }, {
   message: "Manual category name is required when 'Other' is selected",
   path: ["manual_category"],
+}).refine((data) => {
+  if (data.department_id === 'other' && (!data.manual_department_name || data.manual_department_name.trim() === '')) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Manual department name is required when 'Other' is selected",
+  path: ["manual_department_name"],
 });
 
 type CapexFormData = z.infer<typeof capexSchema>;
@@ -44,6 +53,7 @@ export default function CapexEntryForm({
   });
 
   const selectedCategory = watch('category');
+  const selectedDepartment = watch('department_id');
 
   const handleFormSubmit = async (data: CapexFormData) => {
     setIsSubmitting(true);
@@ -51,8 +61,9 @@ export default function CapexEntryForm({
       const submissionData = {
         ...data,
         category: data.category === 'Other' ? data.manual_category : data.category,
+        department_id: data.department_id === 'other' ? null : data.department_id,
+        manual_department_name: data.department_id === 'other' ? data.manual_department_name : null,
         vendor_id: data.vendor_id || null,
-        department_id: data.department_id || null
       };
       delete submissionData.manual_category;
       if (!submissionData.entry_date) {
@@ -106,9 +117,24 @@ export default function CapexEntryForm({
               >
                 <option value="">Select Department</option>
                 {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                <option value="other">Other</option>
               </select>
               {errors.department_id && <p className="text-xs text-red-500 mt-1">{errors.department_id.message}</p>}
             </div>
+
+            {/* Manual Department */}
+            {selectedDepartment === 'other' && (
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Manual Department Name *</label>
+                <input 
+                  type="text"
+                  {...register('manual_department_name')}
+                  placeholder="Type department name here..."
+                  className="w-full px-4 py-2 rounded-md border border-slate-200 focus:border-blue-500 outline-none transition-all text-sm"
+                />
+                {errors.manual_department_name && <p className="text-xs text-red-500 mt-1">{errors.manual_department_name.message}</p>}
+              </div>
+            )}
 
             {/* Category */}
             <div className="space-y-2">

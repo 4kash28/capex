@@ -1,7 +1,7 @@
 import { Vendor, Department, CapexEntry, BillingRecord } from '../types';
 
-const DB_NAME = 'SmartCapexDB';
-const DB_VERSION = 1;
+const DB_NAME = 'ITBMSDB';
+const DB_VERSION = 2;
 
 export interface Setting {
   key: string;
@@ -10,6 +10,7 @@ export interface Setting {
 
 class LocalDB {
   private db: IDBDatabase | null = null;
+  private isInitializing = false;
 
   async connect(): Promise<IDBDatabase> {
     if (this.db) return this.db;
@@ -44,6 +45,12 @@ class LocalDB {
         }
         if (!db.objectStoreNames.contains('settings')) {
           db.createObjectStore('settings', { keyPath: 'key' });
+        }
+        if (!db.objectStoreNames.contains('notifications')) {
+          db.createObjectStore('notifications', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('user_profiles')) {
+          db.createObjectStore('user_profiles', { keyPath: 'id' });
         }
       };
     });
@@ -98,32 +105,76 @@ class LocalDB {
   }
 
   async initMockData() {
-    const vendors = await this.getAll<Vendor>('vendors');
-    if (vendors.length === 0) {
-      const MOCK_VENDORS: Vendor[] = [
-        { id: '1', name: 'Dell Technologies', service_type: 'IT Hardware', contact_person: 'John Doe', email: 'john@dell.com' },
-        { id: '2', name: 'Amazon Web Services', service_type: 'Cloud Services', contact_person: 'Jane Smith', email: 'jane@aws.com' },
-        { id: '3', name: 'Local Infrastructure Co', service_type: 'Construction', contact_person: 'Bob Wilson' },
-      ];
-      for (const v of MOCK_VENDORS) await this.add('vendors', v);
-    }
+    if (this.isInitializing) return;
+    this.isInitializing = true;
+    try {
+      const vendors = await this.getAll<Vendor>('vendors');
+      if (vendors.length === 0) {
+        const MOCK_VENDORS: Vendor[] = [
+          { id: '1', name: 'Dell Technologies', service_type: 'IT Hardware', contact_person: 'John Doe', email: 'john@dell.com' },
+          { id: '2', name: 'Amazon Web Services', service_type: 'Cloud Services', contact_person: 'Jane Smith', email: 'jane@aws.com' },
+          { id: '3', name: 'Local Infrastructure Co', service_type: 'Construction', contact_person: 'Bob Wilson' },
+        ];
+        for (const v of MOCK_VENDORS) await this.update('vendors', v);
+      }
 
-    const departments = await this.getAll<Department>('departments');
-    if (departments.length === 0) {
-      const MOCK_DEPARTMENTS: Department[] = [
-        { id: '1', name: 'IT' },
-        { id: '2', name: 'Finance' },
-        { id: '3', name: 'Operations' },
-      ];
-      for (const d of MOCK_DEPARTMENTS) await this.add('departments', d);
-    }
-    
-    const settings = await this.getAll<Setting>('settings');
-    if (settings.length === 0) {
-        await this.add('settings', { key: 'total_capex_budget', value: '0' });
-        await this.add('settings', { key: 'monthly_capex_limit', value: '0' });
-        await this.add('settings', { key: 'total_billing_budget', value: '1200000' });
-        await this.add('settings', { key: 'monthly_billing_limit', value: '100000' });
+      const departments = await this.getAll<Department>('departments');
+      if (departments.length === 0) {
+        const MOCK_DEPARTMENTS: Department[] = [
+          { id: '1', name: 'IT' },
+          { id: '2', name: 'Finance' },
+          { id: '3', name: 'Operations' },
+        ];
+        for (const d of MOCK_DEPARTMENTS) await this.update('departments', d);
+      }
+      
+      const settings = await this.getAll<Setting>('settings');
+      if (settings.length === 0) {
+          await this.update('settings', { key: 'total_capex_budget', value: '0' });
+          await this.update('settings', { key: 'monthly_capex_limit', value: '0' });
+          await this.update('settings', { key: 'total_billing_budget', value: '1200000' });
+          await this.update('settings', { key: 'monthly_billing_limit', value: '100000' });
+      }
+
+      const profiles = await this.getAll<any>('user_profiles');
+      if (profiles.length === 0) {
+        const MOCK_PROFILES = [
+          { id: 'admin@example.com', role: 'admin', name: 'Admin User' },
+          { id: 'vendor@example.com', role: 'vendor', name: 'Vendor User', vendor_id: '1' },
+          { id: 'security@example.com', role: 'security', name: 'Security User' },
+          { id: 'user@example.com', role: 'user', name: 'Regular User' },
+        ];
+        for (const p of MOCK_PROFILES) await this.update('user_profiles', p);
+      }
+
+      const capex = await this.getAll<CapexEntry>('capex_entries');
+      if (capex.length === 0) {
+        const MOCK_CAPEX: CapexEntry[] = [
+          { 
+            id: '1', 
+            vendor_id: '1', 
+            department_id: '1', 
+            category: 'Hardware', 
+            description: 'Laptops for IT Team', 
+            amount: 500000, 
+            entry_date: new Date().toISOString(),
+            invoice_status: 'not_generated'
+          },
+          { 
+            id: '2', 
+            vendor_id: '1', 
+            department_id: '2', 
+            category: 'Software', 
+            description: 'ERP License Renewal', 
+            amount: 250000, 
+            entry_date: new Date().toISOString(),
+            invoice_status: 'not_generated'
+          }
+        ];
+        for (const c of MOCK_CAPEX) await this.update('capex_entries', c);
+      }
+    } finally {
+      this.isInitializing = false;
     }
   }
 }

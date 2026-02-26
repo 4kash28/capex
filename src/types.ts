@@ -1,3 +1,5 @@
+export type UserRole = 'admin' | 'user' | 'vendor' | 'security';
+
 export interface Vendor {
   id: string;
   name: string;
@@ -16,6 +18,7 @@ export interface Department {
 export interface CapexEntry {
   id: string;
   vendor_id: string;
+  manual_vendor_name?: string;
   department_id: string;
   category: string;
   description: string;
@@ -23,8 +26,21 @@ export interface CapexEntry {
   entry_date: string;
   invoice_url?: string;
   remarks?: string;
+  manual_department_name?: string;
   vendor?: Vendor;
   department?: Department;
+  invoice_status?: 'not_generated' | 'generated' | 'mailed' | 'inwarded' | 'delayed' | 'issue';
+  invoice_generated_at?: string;
+  invoice_mailed_at?: string;
+  bill_inwarded_at?: string;
+}
+
+export interface AppNotification {
+  id: string;
+  message: string;
+  type: 'info' | 'success' | 'warning';
+  created_at: string;
+  read: boolean;
 }
 
 export interface BillingRecord {
