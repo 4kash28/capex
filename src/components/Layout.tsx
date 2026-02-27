@@ -12,7 +12,8 @@ import {
   X,
   Bell,
   Shield,
-  Truck
+  Truck,
+  FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -112,6 +113,7 @@ export default function Layout({ children, activePage, setActivePage, isAdmin, u
       { id: 'billing', label: 'Monthly Billing', icon: Receipt },
       { id: 'reports', label: 'Reports', icon: BarChart3 },
       { id: 'vendors', label: 'Vendors', icon: Users },
+      { id: 'bill_status', label: 'Bill Status', icon: FileText },
     ] : []),
     ...(userProfile?.role === 'vendor' ? [
       { id: 'vendor_portal', label: 'Vendor Portal', icon: Truck },

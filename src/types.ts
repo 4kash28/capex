@@ -29,7 +29,7 @@ export interface CapexEntry {
   manual_department_name?: string;
   vendor?: Vendor;
   department?: Department;
-  invoice_status?: 'not_generated' | 'generated' | 'mailed' | 'inwarded' | 'delayed' | 'issue';
+  invoice_status?: 'not_generated' | 'invoice_receive' | 'invoice_inward' | 'account_verification' | 'ph_signature' | 'portal_update' | 'delayed' | 'issue';
   invoice_generated_at?: string;
   invoice_mailed_at?: string;
   bill_inwarded_at?: string;
@@ -63,6 +63,12 @@ export interface BillingRecord {
   remarks?: string;
   payment_status: 'Paid' | 'Pending' | 'PO Pending';
   vendor?: Vendor;
+  invoice_status?: 'not_generated' | 'invoice_receive' | 'invoice_inward' | 'account_verification' | 'ph_signature' | 'portal_update' | 'delayed' | 'issue';
+  invoice_generated_at?: string;
+  invoice_mailed_at?: string;
+  bill_inwarded_at?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface DashboardStats {

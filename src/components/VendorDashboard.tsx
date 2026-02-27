@@ -1,171 +1,167 @@
 import React, { useState } from 'react';
-import { 
-  Send, 
-  CheckCircle2, 
-  AlertCircle,
-  MessageSquare,
-  FileText,
-  Clock,
-  Info
-} from 'lucide-react';
-import { CapexEntry, AppNotification } from '../types';
-import { cn } from '../lib/utils';
+import { Send, Calendar } from 'lucide-react';
+import { BillingRecord, AppNotification } from '../types';
 
 export default function VendorDashboard({ 
-  entries, 
-  onUpdateStatus,
-  notifications
+  onCreateEntry,
 }: { 
-  entries: CapexEntry[]; 
-  onUpdateStatus: (entryId: string, status: CapexEntry['invoice_status'], remarks?: string) => Promise<void>;
-  notifications: AppNotification[];
+  onCreateEntry: (data: any) => Promise<void>;
 }) {
-  const [status, setStatus] = useState<CapexEntry['invoice_status'] | ''>('');
-  const [remark, setRemark] = useState('');
+  const [vendorName, setVendorName] = useState('');
+  const [serviceType, setServiceType] = useState('');
+  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedOption, setSelectedOption] = useState<BillingRecord['invoice_status'] | ''>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // If there are entries, we use the first one as a reference for the update
-  // If no entries, we can still send a general update if the backend supports it
-  const defaultEntryId = entries.length > 0 ? entries[0].id : 'general_update';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!status) {
-      alert('Please select a status option.');
+    
+    if (!vendorName || !serviceType || !selectedDate || !selectedOption) {
+      alert("Please fill all fields and select an option.");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await onUpdateStatus(defaultEntryId, status as CapexEntry['invoice_status'], remark);
-      alert('Update submitted successfully!');
-      setStatus('');
-      setRemark('');
+      let label = '';
+      if (selectedOption === 'invoice_receive') label = 'Invoice Generated';
+      if (selectedOption === 'issue') label = 'Invoice Issue';
+      if (selectedOption === 'delayed') label = 'Invoice Delay';
+
+      const newRecord = {
+        manual_vendor_name: vendorName,
+        service_type: serviceType,
+        bill_date: selectedDate,
+        invoice_status: selectedOption,
+        remarks: `Vendor selected: ${label} on Date: ${selectedDate}`,
+        total_amount: 0,
+        payment_status: 'pending',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      await onCreateEntry(newRecord);
+      alert(`Status submitted successfully. It will now reflect in the Admin Bill Status Tracker.`);
+      
+      // Reset form
+      setVendorName('');
+      setServiceType('');
+      setSelectedDate('');
+      setSelectedOption('');
     } catch (error) {
       console.error(error);
-      alert('Failed to submit update.');
+      alert("Failed to submit status");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6">
       <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm text-center">
         <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
           <Send className="w-8 h-8 text-blue-600" />
         </div>
         <h2 className="text-2xl font-black text-slate-900 uppercase tracking-widest mb-2">Vendor Portal</h2>
-        <p className="text-sm text-slate-500 font-bold">Select a project and submit your invoice status and updates directly to the Admin.</p>
+        <p className="text-sm text-slate-500 font-bold">Fill in the details, select a date, tick an option, and submit.</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white p-8 rounded-2xl border border-slate-200 shadow-lg space-y-8">
-        
-        <div className="space-y-4">
-          <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">Select Invoice Status</label>
-          
-          <div className="grid grid-cols-1 gap-3">
-            <label className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${status === 'generated' ? 'border-blue-600 bg-blue-50' : 'border-slate-100 hover:border-slate-200'}`}>
-              <input 
-                type="radio" 
-                name="status" 
-                value="generated"
-                checked={status === 'generated'}
-                onChange={() => setStatus('generated')}
-                className="w-5 h-5 text-blue-600"
-              />
-              <div className="flex items-center gap-3">
-                <CheckCircle2 className={`w-5 h-5 ${status === 'generated' ? 'text-blue-600' : 'text-slate-400'}`} />
-                <span className={`font-bold ${status === 'generated' ? 'text-blue-900' : 'text-slate-600'}`}>Invoice Generated</span>
-              </div>
-            </label>
-
-            <label className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${status === 'delayed' ? 'border-amber-600 bg-amber-50' : 'border-slate-100 hover:border-slate-200'}`}>
-              <input 
-                type="radio" 
-                name="status" 
-                value="delayed"
-                checked={status === 'delayed'}
-                onChange={() => setStatus('delayed')}
-                className="w-5 h-5 text-amber-600"
-              />
-              <div className="flex items-center gap-3">
-                <AlertCircle className={`w-5 h-5 ${status === 'delayed' ? 'text-amber-600' : 'text-slate-400'}`} />
-                <span className={`font-bold ${status === 'delayed' ? 'text-amber-900' : 'text-slate-600'}`}>Delay in generation</span>
-              </div>
-            </label>
-
-            <label className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${status === 'issue' ? 'border-rose-600 bg-rose-50' : 'border-slate-100 hover:border-slate-200'}`}>
-              <input 
-                type="radio" 
-                name="status" 
-                value="issue"
-                checked={status === 'issue'}
-                onChange={() => setStatus('issue')}
-                className="w-5 h-5 text-rose-600"
-              />
-              <div className="flex items-center gap-3">
-                <AlertCircle className={`w-5 h-5 ${status === 'issue' ? 'text-rose-600' : 'text-slate-400'}`} />
-                <span className={`font-bold ${status === 'issue' ? 'text-rose-900' : 'text-slate-600'}`}>Other Issue</span>
-              </div>
-            </label>
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-            <MessageSquare className="w-3 h-3" />
-            Remarks / Comments
-          </label>
-          <textarea 
-            value={remark}
-            onChange={(e) => setRemark(e.target.value)}
-            placeholder="Type your message here..."
-            className="w-full px-4 py-4 rounded-xl border-2 border-slate-100 focus:border-blue-500 outline-none transition-all min-h-[120px] font-medium text-slate-700"
-          />
-        </div>
-
-        <button 
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full bg-blue-600 text-white font-black py-4 rounded-xl hover:bg-blue-700 transition-all shadow-xl shadow-blue-600/20 flex items-center justify-center gap-2 uppercase tracking-widest text-sm disabled:opacity-50"
-        >
-          {isSubmitting ? 'Submitting...' : (
-            <>
-              <Send className="w-4 h-4" />
-              Submit Update to Admin
-            </>
-          )}
-        </button>
-      </form>
-
-      {/* Recent Activity Logs */}
       <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
-        <h3 className="text-lg font-black text-slate-900 uppercase tracking-widest mb-6 flex items-center gap-2">
-          <Clock className="w-5 h-5 text-slate-400" />
-          Recent Activity Logs
-        </h3>
-        <div className="space-y-4">
-          {notifications.length === 0 ? (
-            <p className="text-sm text-slate-500 font-medium text-center py-4">No recent activity.</p>
-          ) : (
-            notifications.slice(0, 5).map((note) => (
-              <div key={note.id} className="flex gap-4 p-4 rounded-xl bg-slate-50 border border-slate-100">
-                <div className="mt-0.5">
-                  {note.type === 'success' ? <CheckCircle2 className="w-5 h-5 text-emerald-500" /> :
-                   note.type === 'warning' ? <AlertCircle className="w-5 h-5 text-amber-500" /> :
-                   <Info className="w-5 h-5 text-blue-500" />}
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-slate-700">{note.message}</p>
-                  <p className="text-xs font-medium text-slate-400 mt-1">
-                    {new Date(note.created_at).toLocaleString()}
-                  </p>
-                </div>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Vendor Name</label>
+              <input 
+                type="text" 
+                required
+                placeholder="Enter your vendor name"
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
+                value={vendorName}
+                onChange={(e) => setVendorName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Project / Service Type</label>
+              <input 
+                type="text" 
+                required
+                placeholder="e.g. Printer Service"
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
+                value={serviceType}
+                onChange={(e) => setServiceType(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="bg-slate-50 p-6 rounded-xl border border-slate-100 space-y-6">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Select Date</label>
+              <div className="relative max-w-xs">
+                <Calendar className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input 
+                  type="date" 
+                  required
+                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                />
               </div>
-            ))
-          )}
-        </div>
+            </div>
+
+            {selectedDate && (
+              <div className="space-y-4 pt-2 border-t border-slate-200">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Select Status</label>
+                
+                <div className="flex items-center gap-3">
+                  <input 
+                    type="radio" 
+                    id="gen" 
+                    name="status" 
+                    value="invoice_receive"
+                    checked={selectedOption === 'invoice_receive'}
+                    onChange={() => setSelectedOption('invoice_receive')}
+                    className="w-5 h-5 text-blue-600 cursor-pointer"
+                  />
+                  <label htmlFor="gen" className="text-base font-bold text-slate-700 cursor-pointer">1. Invoice Generated</label>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <input 
+                    type="radio" 
+                    id="iss" 
+                    name="status" 
+                    value="issue"
+                    checked={selectedOption === 'issue'}
+                    onChange={() => setSelectedOption('issue')}
+                    className="w-5 h-5 text-blue-600 cursor-pointer"
+                  />
+                  <label htmlFor="iss" className="text-base font-bold text-slate-700 cursor-pointer">2. Invoice Issue</label>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <input 
+                    type="radio" 
+                    id="del" 
+                    name="status" 
+                    value="delayed"
+                    checked={selectedOption === 'delayed'}
+                    onChange={() => setSelectedOption('delayed')}
+                    className="w-5 h-5 text-blue-600 cursor-pointer"
+                  />
+                  <label htmlFor="del" className="text-base font-bold text-slate-700 cursor-pointer">3. Invoice Delay</label>
+                </div>
+
+                <button 
+                  type="submit"
+                  disabled={isSubmitting || !selectedOption}
+                  className="mt-6 w-full sm:w-auto px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-blue-600/20"
+                >
+                  {isSubmitting ? 'Submitting...' : 'Submit Status'}
+                </button>
+              </div>
+            )}
+          </div>
+        </form>
       </div>
     </div>
   );

@@ -14,6 +14,7 @@ import Reports from './components/Reports';
 import VendorManagement from './components/VendorManagement';
 import VendorDashboard from './components/VendorDashboard';
 import SecurityDashboard from './components/SecurityDashboard';
+import BillStatus from './components/BillStatus';
 import Login from './components/Login';
 import { localDB } from './lib/localDB';
 import { 
@@ -139,7 +140,8 @@ export default function App() {
         await localDB.initMockData();
         const profiles = await localDB.getAll<any>('user_profiles');
         const profile = profiles.find(p => p.id === session.user.email);
-        setUserProfile(profile || { id: session.user.email, role: 'user', name: 'User' });
+        const defaultRole = session.user.email.includes('admin') ? 'admin' : 'user';
+        setUserProfile(profile || { id: session.user.email, role: defaultRole, name: defaultRole === 'admin' ? 'Admin' : 'User' });
       } else {
         setUserProfile(null);
       }
@@ -271,7 +273,11 @@ export default function App() {
         setVendors(vendors);
         setDepartments(departments);
         setCapexEntries(capex.sort((a, b) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime()));
-        setBillingRecords(billing.sort((a, b) => new Date(b.bill_date).getTime() - new Date(a.bill_date).getTime()));
+        setBillingRecords(billing.sort((a, b) => {
+          const timeA = new Date(a.updated_at || a.created_at || a.bill_date || 0).getTime();
+          const timeB = new Date(b.updated_at || b.created_at || b.bill_date || 0).getTime();
+          return timeB - timeA;
+        }));
 
         let currentBudget = 0;
         let currentLimit = 0;
@@ -337,7 +343,13 @@ export default function App() {
       if (vRes.data) setVendors(vRes.data);
       if (dRes.data) setDepartments(dRes.data);
       if (cRes.data) setCapexEntries(cRes.data);
-      if (bRes.data) setBillingRecords(bRes.data);
+      if (bRes.data) {
+        setBillingRecords(bRes.data.sort((a: any, b: any) => {
+          const timeA = new Date(a.updated_at || a.created_at || a.bill_date || 0).getTime();
+          const timeB = new Date(b.updated_at || b.created_at || b.bill_date || 0).getTime();
+          return timeB - timeA;
+        }));
+      }
 
       let currentBudget = 0;
       let currentLimit = 0;
@@ -451,8 +463,8 @@ export default function App() {
     await fetchData();
   };
 
-  const handleUpdateInvoiceStatus = async (entryId: string, status: CapexEntry['invoice_status'], vendorRemarks?: string) => {
-    const entry = capexEntries.find(e => e.id === entryId);
+  const handleUpdateInvoiceStatus = async (entryId: string, status: BillingRecord['invoice_status'], vendorRemarks?: string) => {
+    const entry = billingRecords.find(e => e.id === entryId);
     
     let finalRemarks = entry?.remarks || '';
     if (vendorRemarks) {
@@ -465,17 +477,19 @@ export default function App() {
         ...entry, 
         invoice_status: status,
         remarks: finalRemarks,
-        invoice_generated_at: status === 'generated' ? new Date().toISOString() : entry.invoice_generated_at,
-        invoice_mailed_at: status === 'mailed' ? new Date().toISOString() : entry.invoice_mailed_at,
-        bill_inwarded_at: status === 'inwarded' ? new Date().toISOString() : entry.bill_inwarded_at,
+        updated_at: new Date().toISOString(),
+        invoice_generated_at: status === 'invoice_receive' ? new Date().toISOString() : entry.invoice_generated_at,
+        invoice_mailed_at: status === 'invoice_inward' ? new Date().toISOString() : entry.invoice_mailed_at,
+        bill_inwarded_at: status === 'account_verification' ? new Date().toISOString() : entry.bill_inwarded_at,
       };
 
       if (isOffline || !isSupabaseConfigured) {
-        await localDB.update('capex_entries', updatedEntry);
+        await localDB.update('billing_records', updatedEntry);
       } else {
-        const { error } = await supabase.from('capex_entries').update({
+        const { error } = await supabase.from('billing_records').update({
           invoice_status: status,
           remarks: finalRemarks,
+          updated_at: updatedEntry.updated_at,
           invoice_generated_at: updatedEntry.invoice_generated_at,
           invoice_mailed_at: updatedEntry.invoice_mailed_at,
           bill_inwarded_at: updatedEntry.bill_inwarded_at
@@ -489,11 +503,13 @@ export default function App() {
     // Create notification
     let message = '';
     const vendorName = entry?.vendor?.name || userProfile?.name || 'Vendor';
-    const projectDesc = entry?.description || 'General Update';
+    const projectDesc = entry?.service_type || 'General Update';
 
-    if (status === 'generated') message = `Vendor ${vendorName} has generated an invoice for ${projectDesc}.`;
-    if (status === 'mailed') message = `Vendor ${vendorName} has mailed the invoice for ${projectDesc}.`;
-    if (status === 'inwarded') message = `Security has inwarded the bill for ${projectDesc}.`;
+    if (status === 'invoice_receive') message = `Invoice received for ${projectDesc}.`;
+    if (status === 'invoice_inward') message = `Invoice inwarded for ${projectDesc}.`;
+    if (status === 'account_verification') message = `Account verification completed for ${projectDesc}.`;
+    if (status === 'ph_signature') message = `PH Signature completed for ${projectDesc}.`;
+    if (status === 'portal_update') message = `Portal update completed for ${projectDesc}.`;
     if (status === 'delayed') message = `Vendor ${vendorName} reported a DELAY in generating invoice for ${projectDesc}.`;
     if (status === 'issue') {
       if (userProfile?.role === 'security') {
@@ -624,7 +640,9 @@ export default function App() {
       const newRecord = { 
         ...data, 
         id: Math.random().toString(), 
-        vendor 
+        vendor,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
       await localDB.add('billing_records', newRecord);
       await fetchData();
@@ -666,13 +684,18 @@ export default function App() {
   const renderPage = (isAdmin: boolean) => {
     if (userProfile?.role === 'vendor') {
       const vendorEntries = userProfile.vendor_id 
-        ? capexEntries.filter(e => e.vendor_id === userProfile.vendor_id)
-        : capexEntries;
-      return <VendorDashboard entries={vendorEntries} onUpdateStatus={handleUpdateInvoiceStatus} notifications={notifications} />;
+        ? billingRecords.filter(e => e.vendor_id === userProfile.vendor_id)
+        : billingRecords;
+      
+      if (activePage === 'bill_status') {
+        return <BillStatus entries={vendorEntries} onUpdateStatus={handleUpdateInvoiceStatus} userRole={userProfile?.role || 'user'} />;
+      }
+      
+      return <VendorDashboard onCreateEntry={handleAddBillingRecord} />;
     }
 
     if (userProfile?.role === 'security') {
-      return <SecurityDashboard entries={capexEntries} onInward={handleUpdateInvoiceStatus} notifications={notifications} />;
+      return <SecurityDashboard entries={billingRecords} onInward={handleUpdateInvoiceStatus} notifications={notifications} />;
     }
 
     if (loading) {
@@ -709,6 +732,8 @@ export default function App() {
         );
       case 'reports':
         return <Reports billingRecords={billingRecords} />;
+      case 'bill_status':
+        return <BillStatus entries={billingRecords} onUpdateStatus={handleUpdateInvoiceStatus} userRole={userProfile?.role || 'user'} />;
       case 'vendors':
         return <VendorManagement vendors={vendors} capexEntries={capexEntries} billingRecords={billingRecords} onAdd={handleAddVendor} onDelete={handleDeleteVendor} isAdmin={isAdmin} />;
       case 'settings':
