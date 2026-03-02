@@ -2,6 +2,7 @@ export type UserRole = 'admin' | 'user' | 'vendor' | 'security';
 
 export interface Vendor {
   id: string;
+  user_id?: string;
   name: string;
   service_type?: string;
   contact_person?: string;
@@ -12,11 +13,13 @@ export interface Vendor {
 
 export interface Department {
   id: string;
+  user_id?: string;
   name: string;
 }
 
 export interface CapexEntry {
   id: string;
+  user_id?: string;
   vendor_id: string;
   manual_vendor_name?: string;
   department_id: string;
@@ -37,6 +40,7 @@ export interface CapexEntry {
 
 export interface AppNotification {
   id: string;
+  user_id?: string;
   message: string;
   type: 'info' | 'success' | 'warning';
   created_at: string;
@@ -45,6 +49,7 @@ export interface AppNotification {
 
 export interface BillingRecord {
   id: string;
+  user_id?: string;
   vendor_id: string;
   manual_vendor_name?: string;
   invoice_number?: string;

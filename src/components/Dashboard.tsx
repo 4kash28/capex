@@ -27,25 +27,24 @@ import { motion } from 'motion/react';
 import { formatCurrency, formatCurrencyPDF, cn, formatDate } from '../lib/utils';
 import { DashboardStats, AppNotification } from '../types';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { Bell, Clock } from 'lucide-react';
+import { generateProfessionalPDF } from '../lib/pdfGenerator';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
 const StatCard = ({ title, value, icon: Icon, trend, trendValue, color, alert }: any) => (
   <div className={cn(
-    "bg-white p-6 rounded-lg border border-slate-200 relative overflow-hidden",
-    alert && "border-red-200 bg-red-50/30"
+    "card-2d p-6 relative overflow-hidden",
+    alert && "border-red-500 bg-red-50"
   )}>
     <div className="flex justify-between items-start mb-4">
-      <div className={cn("p-2 rounded", color)}>
+      <div className={cn("p-2", color)}>
         <Icon className="w-5 h-5 text-white" />
       </div>
       {trend && (
         <div className={cn(
-          "flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded border",
-          trend === 'up' ? "text-emerald-600 bg-emerald-50 border-emerald-100" : "text-rose-600 bg-rose-50 border-rose-100"
+          "flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 border",
+          trend === 'up' ? "text-emerald-700 bg-emerald-50 border-emerald-200" : "text-rose-700 bg-rose-50 border-rose-200"
         )}>
           {trend === 'up' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
           {trendValue}
@@ -114,66 +113,28 @@ export default function Dashboard({ stats, monthlyData, quarterlyData, vendorDat
         return;
       }
 
-      const doc = new jsPDF();
-      
-      // Header
-      doc.setFontSize(18);
-      doc.setTextColor(0, 0, 0);
-      doc.setFont('helvetica', 'bold');
-      doc.text('CAPEX EXPENDITURE REPORT', 14, 20);
-      
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      doc.text(`Generated on: ${formatDate(new Date().toISOString())}`, 14, 28);
-
-      // Summary Section
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Financial Summary', 14, 40);
-      
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      doc.text(`Total Budget: ${formatCurrencyPDF(stats.totalBudget)}`, 14, 48);
-      doc.text(`Total Consumed: ${formatCurrencyPDF(stats.totalConsumed)}`, 14, 54);
-      doc.text(`Remaining Budget: ${formatCurrencyPDF(stats.remainingBudget)}`, 14, 60);
-
-      // Table Header
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Detailed Expenditure', 14, 75);
-
-      // Table
-      const tableColumn = ["Date", "Month", "Year", "Vendor", "Category", "Amount"];
-      const tableRows = capexEntries.map(item => [
-        formatDate(item.entry_date),
-        new Date(item.entry_date).toLocaleString('default', { month: 'short' }),
-        new Date(item.entry_date).getFullYear().toString(),
-        item.vendor?.name || item.manual_vendor_name || 'N/A',
-        item.category,
-        formatCurrencyPDF(item.amount)
-      ]);
-
-      autoTable(doc, {
-        head: [tableColumn],
-        body: tableRows,
-        startY: 80,
-        theme: 'plain',
-        styles: { 
-          fontSize: 9, 
-          cellPadding: 3,
-          font: 'helvetica',
-          lineColor: [0, 0, 0],
-          lineWidth: 0.1,
-          textColor: [0, 0, 0]
-        },
-        headStyles: { 
-          fontStyle: 'bold',
-          halign: 'left'
-        },
-        columnStyles: {
-          5: { halign: 'right' }
+      const doc = generateProfessionalPDF({
+        title: 'CAPEX Expenditure Report',
+        metadata: {
+          'Report Period': 'All Time',
+          'Total Budget': formatCurrencyPDF(stats.totalBudget),
+          'Total Consumed': formatCurrencyPDF(stats.totalConsumed),
+          'Remaining Budget': formatCurrencyPDF(stats.remainingBudget),
         }
-      });
+      }, [
+        {
+          title: 'Detailed Expenditure',
+          headers: ["Date", "Month", "Year", "Vendor", "Category", "Amount"],
+          rows: capexEntries.map(item => [
+            formatDate(item.entry_date),
+            new Date(item.entry_date).toLocaleString('default', { month: 'short' }),
+            new Date(item.entry_date).getFullYear().toString(),
+            item.vendor?.name || item.manual_vendor_name || 'N/A',
+            item.category,
+            formatCurrencyPDF(item.amount)
+          ])
+        }
+      ]);
 
       doc.save(`capex_report_${new Date().toISOString().split('T')[0]}.pdf`);
     } catch (error) {
@@ -185,7 +146,7 @@ export default function Dashboard({ stats, monthlyData, quarterlyData, vendorDat
   return (
     <div className="space-y-6">
       {/* Header with Export Buttons */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 card-2d p-4">
         <div>
           <h2 className="text-lg font-black text-slate-900 uppercase tracking-widest">Dashboard Overview</h2>
           <p className="text-xs text-slate-500 font-bold">Monitor your Capex and Billing budgets</p>
@@ -193,14 +154,14 @@ export default function Dashboard({ stats, monthlyData, quarterlyData, vendorDat
         <div className="flex items-center gap-2">
           <button 
             onClick={exportToExcel}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm"
+            className="flex items-center gap-2 btn-2d-outline text-[10px] uppercase tracking-widest"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
             Export Capex Excel
           </button>
           <button 
             onClick={exportToPDF}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm"
+            className="flex items-center gap-2 btn-2d-outline text-[10px] uppercase tracking-widest"
           >
             <FileText className="w-4 h-4 text-rose-600" />
             Export Capex PDF
@@ -278,7 +239,7 @@ export default function Dashboard({ stats, monthlyData, quarterlyData, vendorDat
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Capex Progress */}
         <div className="space-y-4">
-          <div className="bg-white p-6 rounded-lg border border-slate-200">
+          <div className="card-2d p-6">
             <div className="flex justify-between items-end mb-4">
               <div>
                 <h4 className="font-bold text-slate-900 uppercase text-xs tracking-widest">Total Capex Utilization</h4>
@@ -291,7 +252,7 @@ export default function Dashboard({ stats, monthlyData, quarterlyData, vendorDat
                 {usagePercent.toFixed(1)}%
               </span>
             </div>
-            <div className="h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+            <div className="h-2 bg-slate-100 overflow-hidden border border-slate-200">
               <motion.div 
                 initial={{ width: 0 }}
                 animate={{ width: `${Math.min(usagePercent, 100)}%` }}
@@ -303,7 +264,7 @@ export default function Dashboard({ stats, monthlyData, quarterlyData, vendorDat
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-lg border border-slate-200">
+          <div className="card-2d p-6">
             <div className="flex justify-between items-end mb-4">
               <div>
                 <h4 className="font-bold text-slate-900 uppercase text-xs tracking-widest">Monthly Capex Utilization</h4>
@@ -316,7 +277,7 @@ export default function Dashboard({ stats, monthlyData, quarterlyData, vendorDat
                 {monthlyPercent.toFixed(1)}%
               </span>
             </div>
-            <div className="h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+            <div className="h-2 bg-slate-100 overflow-hidden border border-slate-200">
               <motion.div 
                 initial={{ width: 0 }}
                 animate={{ width: `${Math.min(monthlyPercent, 100)}%` }}
@@ -331,7 +292,7 @@ export default function Dashboard({ stats, monthlyData, quarterlyData, vendorDat
 
         {/* Billing Progress */}
         <div className="space-y-4">
-          <div className="bg-white p-6 rounded-lg border border-slate-200">
+          <div className="card-2d p-6">
             <div className="flex justify-between items-end mb-4">
               <div>
                 <h4 className="font-bold text-slate-900 uppercase text-xs tracking-widest">Total Billing Utilization</h4>
@@ -344,7 +305,7 @@ export default function Dashboard({ stats, monthlyData, quarterlyData, vendorDat
                 {billingUsagePercent.toFixed(1)}%
               </span>
             </div>
-            <div className="h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+            <div className="h-2 bg-slate-100 overflow-hidden border border-slate-200">
               <motion.div 
                 initial={{ width: 0 }}
                 animate={{ width: `${Math.min(billingUsagePercent, 100)}%` }}
@@ -356,7 +317,7 @@ export default function Dashboard({ stats, monthlyData, quarterlyData, vendorDat
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-lg border border-slate-200">
+          <div className="card-2d p-6">
             <div className="flex justify-between items-end mb-4">
               <div>
                 <h4 className="font-bold text-slate-900 uppercase text-xs tracking-widest">Monthly Billing Utilization</h4>
@@ -369,7 +330,7 @@ export default function Dashboard({ stats, monthlyData, quarterlyData, vendorDat
                 {billingMonthlyPercent.toFixed(1)}%
               </span>
             </div>
-            <div className="h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+            <div className="h-2 bg-slate-100 overflow-hidden border border-slate-200">
               <motion.div 
                 initial={{ width: 0 }}
                 animate={{ width: `${Math.min(billingMonthlyPercent, 100)}%` }}
@@ -385,17 +346,17 @@ export default function Dashboard({ stats, monthlyData, quarterlyData, vendorDat
 
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 bg-white p-6 rounded-lg border border-slate-200">
+        <div className="lg:col-span-2 card-2d p-6">
           <div className="flex items-center justify-between mb-6">
             <h4 className="font-bold text-slate-900 uppercase text-xs tracking-widest">
               {chartView === 'monthly' ? 'Monthly' : 'Quarterly'} Capex Usage
             </h4>
-            <div className="flex bg-slate-100 p-1 rounded-md">
+            <div className="flex bg-slate-100 p-1">
               <button 
                 onClick={() => setChartView('monthly')}
                 className={cn(
-                  "px-3 py-1 rounded text-[10px] font-black uppercase transition-all",
-                  chartView === 'monthly' ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                  "px-3 py-1 text-[10px] font-black uppercase transition-none",
+                  chartView === 'monthly' ? "bg-white text-blue-600 border border-slate-200" : "text-slate-500 hover:text-slate-800"
                 )}
               >
                 Monthly
@@ -403,8 +364,8 @@ export default function Dashboard({ stats, monthlyData, quarterlyData, vendorDat
               <button 
                 onClick={() => setChartView('quarterly')}
                 className={cn(
-                  "px-3 py-1 rounded text-[10px] font-black uppercase transition-all",
-                  chartView === 'quarterly' ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                  "px-3 py-1 text-[10px] font-black uppercase transition-none",
+                  chartView === 'quarterly' ? "bg-white text-blue-600 border border-slate-200" : "text-slate-500 hover:text-slate-800"
                 )}
               >
                 Quarterly
@@ -432,7 +393,7 @@ export default function Dashboard({ stats, monthlyData, quarterlyData, vendorDat
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg border border-slate-200">
+        <div className="card-2d p-6">
           <h4 className="font-bold text-slate-900 mb-6 uppercase text-xs tracking-widest">Vendor Split</h4>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -462,8 +423,8 @@ export default function Dashboard({ stats, monthlyData, quarterlyData, vendorDat
       {/* Activity and Recent Entries */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Activity / Logs */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden h-fit">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+        <div className="card-2d overflow-hidden h-fit">
+          <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
             <div className="flex items-center gap-2">
               <Bell className="w-4 h-4 text-blue-600" />
               <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-widest">Recent Activity Logs</h4>
@@ -473,11 +434,11 @@ export default function Dashboard({ stats, monthlyData, quarterlyData, vendorDat
             {notifications.length === 0 ? (
               <div className="p-8 text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest">No activity recorded</div>
             ) : (
-              <div className="divide-y divide-slate-50">
+              <div className="divide-y divide-slate-200">
                 {notifications.slice(0, 15).map((note) => (
-                  <div key={note.id} className="p-4 hover:bg-slate-50 transition-colors">
+                  <div key={note.id} className="p-4 hover:bg-slate-50 transition-none">
                     <div className="flex items-start gap-3">
-                      <div className="mt-0.5 p-1 bg-blue-50 rounded text-blue-600">
+                      <div className="mt-0.5 p-1 bg-blue-50 text-blue-600 border border-blue-100">
                         <Clock className="w-3 h-3" />
                       </div>
                       <div>
@@ -495,34 +456,34 @@ export default function Dashboard({ stats, monthlyData, quarterlyData, vendorDat
         </div>
 
         {/* Recent Entries Table */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden h-fit">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+        <div className="lg:col-span-2 card-2d overflow-hidden h-fit">
+          <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Recent Capex Entries</h4>
             <span className="text-[8px] font-black text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded uppercase tracking-widest">
               {capexEntries.length} Total
             </span>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="table-2d">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Date</th>
-                  <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Vendor</th>
-                  <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Department</th>
-                  <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Category</th>
-                  <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Amount</th>
+                <tr>
+                  <th>Date</th>
+                  <th>Vendor</th>
+                  <th>Department</th>
+                  <th>Category</th>
+                  <th className="text-right">Amount</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {capexEntries.length === 0 ? (
-                  <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">No entries found</td></tr>
+                  <tr><td colSpan={5} className="text-center text-slate-400 text-xs font-bold uppercase tracking-widest">No entries found</td></tr>
                 ) : capexEntries.slice(0, 10).map((item, i) => (
-                  <tr key={i} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-4 py-3 text-xs text-slate-600 font-bold whitespace-nowrap">{formatDate(item.entry_date)}</td>
-                    <td className="px-4 py-3 text-xs font-black text-slate-900">{item.vendor?.name || item.manual_vendor_name || 'N/A'}</td>
-                    <td className="px-4 py-3 text-xs text-slate-600 font-bold">{item.department?.name || item.manual_department_name || 'N/A'}</td>
-                    <td className="px-4 py-3 text-xs text-slate-600">{item.category}</td>
-                    <td className="px-4 py-3 text-xs font-black text-slate-900 text-right whitespace-nowrap">{formatCurrency(item.amount)}</td>
+                  <tr key={i}>
+                    <td className="font-bold whitespace-nowrap">{formatDate(item.entry_date)}</td>
+                    <td className="font-black text-slate-900">{item.vendor?.name || item.manual_vendor_name || 'N/A'}</td>
+                    <td className="font-bold">{item.department?.name || item.manual_department_name || 'N/A'}</td>
+                    <td>{item.category}</td>
+                    <td className="font-black text-slate-900 text-right whitespace-nowrap">{formatCurrency(item.amount)}</td>
                   </tr>
                 ))}
               </tbody>

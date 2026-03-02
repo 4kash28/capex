@@ -58,15 +58,15 @@ export default function VendorDashboard({
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm text-center">
-        <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+      <div className="card-2d p-8 text-center">
+        <div className="w-16 h-16 bg-blue-50 border-2 border-slate-900 flex items-center justify-center mx-auto mb-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
           <Send className="w-8 h-8 text-blue-600" />
         </div>
         <h2 className="text-2xl font-black text-slate-900 uppercase tracking-widest mb-2">Vendor Portal</h2>
         <p className="text-sm text-slate-500 font-bold">Fill in the details, select a date, tick an option, and submit.</p>
       </div>
 
-      <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
+      <div className="card-2d p-8">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
@@ -75,7 +75,7 @@ export default function VendorDashboard({
                 type="text" 
                 required
                 placeholder="Enter your vendor name"
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
+                className="input-2d w-full"
                 value={vendorName}
                 onChange={(e) => setVendorName(e.target.value)}
               />
@@ -86,14 +86,14 @@ export default function VendorDashboard({
                 type="text" 
                 required
                 placeholder="e.g. Printer Service"
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
+                className="input-2d w-full"
                 value={serviceType}
                 onChange={(e) => setServiceType(e.target.value)}
               />
             </div>
           </div>
 
-          <div className="bg-slate-50 p-6 rounded-xl border border-slate-100 space-y-6">
+          <div className="bg-slate-50 p-6 border-2 border-slate-900 space-y-6 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Select Date</label>
               <div className="relative max-w-xs">
@@ -101,7 +101,7 @@ export default function VendorDashboard({
                 <input 
                   type="date" 
                   required
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
+                  className="input-2d w-full !pl-10"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
                 />
@@ -154,7 +154,7 @@ export default function VendorDashboard({
                 <button 
                   type="submit"
                   disabled={isSubmitting || !selectedOption}
-                  className="mt-6 w-full sm:w-auto px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-blue-600/20"
+                  className="btn-2d mt-6 w-full sm:w-auto px-8 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? 'Submitting...' : 'Submit Status'}
                 </button>

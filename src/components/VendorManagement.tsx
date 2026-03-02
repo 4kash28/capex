@@ -15,8 +15,7 @@ import {
 import { Vendor } from '../types';
 import { cn, formatCurrency, formatCurrencyPDF, formatDate } from '../lib/utils';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { generateProfessionalPDF } from '../lib/pdfGenerator';
 
 export default function VendorManagement({ 
   vendors, 
@@ -148,66 +147,35 @@ export default function VendorManagement({
       return;
     }
 
-    const doc = new jsPDF();
-    
-    doc.setFontSize(18);
-    doc.setTextColor(0, 0, 0);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`Vendor Report: ${vendor.name}`, 14, 20);
-    
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Generated on: ${formatDate(new Date().toISOString())}`, 14, 28);
-    
     let filterText = [];
     if (filterYear !== 'All') filterText.push(`Year: ${filterYear}`);
     if (filterMonth !== 'All') filterText.push(`Month: ${filterMonth}`);
     if (filterDate) filterText.push(`Date: ${formatDate(filterDate)}`);
-    
-    if (filterText.length > 0) {
-      doc.text(`Filters applied: ${filterText.join(', ')}`, 14, 34);
-    }
 
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Summary', 14, 46);
-    
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Total Capex: ${formatCurrencyPDF(expenses.totalCapex)}`, 14, 54);
-    doc.text(`Total Billing: ${formatCurrencyPDF(expenses.totalBilling)}`, 14, 60);
-    doc.text(`Total Spent: ${formatCurrencyPDF(expenses.total)}`, 14, 66);
-
-    const tableColumn = ["Type", "Date", "Category", "Description", "Amount"];
-    const tableRows = exportData.map(item => [
-      item.type,
-      formatDate(item.date),
-      item.category,
-      item.desc,
-      formatCurrencyPDF(item.amount)
-    ]);
-
-    autoTable(doc, {
-      head: [tableColumn],
-      body: tableRows,
-      startY: 76,
-      theme: 'plain',
-      styles: { 
-        fontSize: 9, 
-        cellPadding: 3,
-        font: 'helvetica',
-        lineColor: [0, 0, 0],
-        lineWidth: 0.1,
-        textColor: [0, 0, 0]
-      },
-      headStyles: { 
-        fontStyle: 'bold',
-        halign: 'left'
-      },
-      columnStyles: {
-        4: { halign: 'right' }
+    const doc = generateProfessionalPDF({
+      title: 'Vendor Report',
+      subtitle: vendor.name,
+      metadata: {
+        'Category': vendor.service_type || 'N/A',
+        'Contact Info': vendor.contact_person ? `${vendor.contact_person} (${vendor.email || vendor.phone || 'N/A'})` : 'N/A',
+        'Filters Applied': filterText.length > 0 ? filterText.join(', ') : 'None',
+        'Total Capex': formatCurrencyPDF(expenses.totalCapex),
+        'Total Billing': formatCurrencyPDF(expenses.totalBilling),
+        'Total Spent': formatCurrencyPDF(expenses.total),
       }
-    });
+    }, [
+      {
+        title: 'Detailed Expenses',
+        headers: ["Type", "Date", "Category", "Description", "Amount"],
+        rows: exportData.map(item => [
+          item.type,
+          formatDate(item.date),
+          item.category,
+          item.desc,
+          formatCurrencyPDF(item.amount)
+        ])
+      }
+    ]);
 
     doc.save(`vendor_report_${vendor.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
   };
@@ -222,13 +190,13 @@ export default function VendorManagement({
             placeholder="Search vendors..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 rounded-md border border-slate-200 focus:border-blue-500 outline-none transition-all text-sm"
+            className="input-2d w-full !pl-9"
           />
         </div>
         {isAdmin && (
           <button 
             onClick={() => setIsAdding(true)}
-            className="flex items-center justify-center gap-2 px-6 py-2 bg-blue-600 text-white font-bold rounded-md hover:bg-blue-700 transition-all text-sm"
+            className="btn-2d flex items-center justify-center gap-2"
           >
             <Plus className="w-4 h-4" />
             Add Vendor
@@ -237,7 +205,7 @@ export default function VendorManagement({
       </div>
 
       {isAdding && isAdmin && (
-        <div className="bg-white p-6 rounded-lg border border-blue-200 animate-in fade-in slide-in-from-top-4">
+        <div className="card-2d p-6 animate-in fade-in slide-in-from-top-4">
           <h3 className="text-sm font-bold text-slate-900 mb-4 uppercase tracking-wider">Add New Vendor</h3>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <input 
@@ -245,44 +213,44 @@ export default function VendorManagement({
               required
               value={newVendor.name}
               onChange={e => setNewVendor({...newVendor, name: e.target.value})}
-              className="px-4 py-2 rounded-md border border-slate-200 outline-none focus:border-blue-500 text-sm"
+              className="input-2d"
             />
             <input 
               placeholder="Service Type"
               value={newVendor.service_type}
               onChange={e => setNewVendor({...newVendor, service_type: e.target.value})}
-              className="px-4 py-2 rounded-md border border-slate-200 outline-none focus:border-blue-500 text-sm"
+              className="input-2d"
             />
             <input 
               placeholder="Contact Person"
               value={newVendor.contact_person}
               onChange={e => setNewVendor({...newVendor, contact_person: e.target.value})}
-              className="px-4 py-2 rounded-md border border-slate-200 outline-none focus:border-blue-500 text-sm"
+              className="input-2d"
             />
             <input 
               type="email"
               placeholder="Email"
               value={newVendor.email}
               onChange={e => setNewVendor({...newVendor, email: e.target.value})}
-              className="px-4 py-2 rounded-md border border-slate-200 outline-none focus:border-blue-500 text-sm"
+              className="input-2d"
             />
             <input 
               placeholder="Address"
               value={newVendor.address}
               onChange={e => setNewVendor({...newVendor, address: e.target.value})}
-              className="px-4 py-2 rounded-md border border-slate-200 outline-none focus:border-blue-500 text-sm"
+              className="input-2d"
             />
             <div className="flex gap-2">
               <button 
                 type="submit"
-                className="flex-1 bg-blue-600 text-white font-bold py-2 rounded-md hover:bg-blue-700 text-sm"
+                className="btn-2d flex-1"
               >
                 Save
               </button>
               <button 
                 type="button"
                 onClick={() => setIsAdding(false)}
-                className="px-4 py-2 border border-slate-200 text-slate-600 rounded-md hover:bg-slate-50 text-sm font-bold"
+                className="btn-2d-outline"
               >
                 Cancel
               </button>
@@ -293,7 +261,7 @@ export default function VendorManagement({
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredVendors.map(vendor => (
-          <div key={vendor.id} className="bg-white p-6 rounded-lg border border-slate-200 hover:border-blue-400 transition-all group">
+          <div key={vendor.id} className="card-2d p-6 group">
             <div className="flex justify-between items-start mb-4">
               <div className="w-10 h-10 bg-slate-100 rounded flex items-center justify-center text-slate-600">
                 <Building2 className="w-5 h-5" />
@@ -339,7 +307,7 @@ export default function VendorManagement({
             
             <button 
               onClick={() => setSelectedVendor(vendor)}
-              className="w-full mt-6 flex items-center justify-center gap-2 py-2 rounded border border-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all"
+              className="btn-2d-outline w-full mt-6 flex items-center justify-center gap-2"
             >
               View History
               <ExternalLink className="w-3 h-3" />
@@ -359,14 +327,14 @@ export default function VendorManagement({
               <div className="flex items-center gap-2">
                 <button 
                   onClick={() => exportVendorReportExcel(selectedVendor)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all"
+                  className="btn-2d-outline flex items-center gap-2 text-[10px]"
                 >
                   <FileSpreadsheet className="w-3 h-3 text-emerald-600" />
                   Excel
                 </button>
                 <button 
                   onClick={() => exportVendorReportPDF(selectedVendor)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all"
+                  className="btn-2d-outline flex items-center gap-2 text-[10px]"
                 >
                   <FileText className="w-3 h-3 text-rose-600" />
                   PDF
@@ -407,13 +375,13 @@ export default function VendorManagement({
                 return (
                   <div className="space-y-6">
                     {/* Filters */}
-                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-4">
+                    <div className="card-2d p-4 flex flex-wrap gap-4">
                       <div className="space-y-1">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Year</label>
                         <select 
                           value={filterYear}
                           onChange={(e) => setFilterYear(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                          className="input-2d w-full"
                         >
                           <option value="All">All Years</option>
                           {years.map(y => <option key={y} value={y}>{y}</option>)}
@@ -424,7 +392,7 @@ export default function VendorManagement({
                         <select 
                           value={filterMonth}
                           onChange={(e) => setFilterMonth(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                          className="input-2d w-full"
                         >
                           <option value="All">All Months</option>
                           {months.map(m => <option key={m} value={m}>{m}</option>)}
@@ -436,13 +404,13 @@ export default function VendorManagement({
                           type="date"
                           value={filterDate}
                           onChange={(e) => setFilterDate(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                          className="input-2d w-full"
                         />
                       </div>
                       <div className="flex items-end pb-0.5">
                         <button 
                           onClick={() => { setFilterYear('All'); setFilterMonth('All'); setFilterDate(''); }}
-                          className="px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+                          className="btn-2d-outline"
                         >
                           Clear Filters
                         </button>
@@ -450,43 +418,43 @@ export default function VendorManagement({
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                      <div className="card-2d p-4">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Capex</p>
                         <p className="text-xl font-black text-blue-600">{formatCurrency(expenses.totalCapex)}</p>
                       </div>
-                      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                      <div className="card-2d p-4">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Billing</p>
                         <p className="text-xl font-black text-emerald-600">{formatCurrency(expenses.totalBilling)}</p>
                       </div>
-                      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                      <div className="card-2d p-4">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Spent</p>
                         <p className="text-xl font-black text-slate-900">{formatCurrency(expenses.total)}</p>
                       </div>
                     </div>
 
-                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="card-2d overflow-hidden">
                       <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
+                        <table className="table-2d">
                           <thead>
-                            <tr className="bg-slate-50 border-b border-slate-200">
-                              <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Type</th>
-                              <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Date</th>
-                              <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Category</th>
-                              <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Description</th>
-                              <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Amount</th>
+                            <tr>
+                              <th>Type</th>
+                              <th>Date</th>
+                              <th>Category</th>
+                              <th>Description</th>
+                              <th className="text-right">Amount</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-100">
+                          <tbody>
                             {allExpenses.length === 0 ? (
                               <tr>
-                                <td colSpan={5} className="px-4 py-8 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">
+                                <td colSpan={5} className="text-center text-slate-400 text-xs font-bold uppercase tracking-widest">
                                   No expenses found
                                 </td>
                               </tr>
                             ) : (
                               allExpenses.map((item, i) => (
-                                <tr key={i} className="hover:bg-slate-50/50 transition-colors">
-                                  <td className="px-4 py-3">
+                                <tr key={i}>
+                                  <td>
                                     <span className={cn(
                                       "px-2 py-1 rounded text-[10px] font-bold uppercase whitespace-nowrap",
                                       item.type === 'Capex' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'
@@ -494,10 +462,10 @@ export default function VendorManagement({
                                       {item.type}
                                     </span>
                                   </td>
-                                  <td className="px-4 py-3 text-xs text-slate-600 font-bold whitespace-nowrap">{formatDate(item.date)}</td>
-                                  <td className="px-4 py-3 text-xs text-slate-600">{item.category}</td>
-                                  <td className="px-4 py-3 text-xs text-slate-600 max-w-xs truncate" title={item.desc}>{item.desc}</td>
-                                  <td className="px-4 py-3 text-xs font-black text-slate-900 text-right whitespace-nowrap">{formatCurrency(item.amount)}</td>
+                                  <td className="font-bold whitespace-nowrap">{formatDate(item.date)}</td>
+                                  <td>{item.category}</td>
+                                  <td className="max-w-xs truncate" title={item.desc}>{item.desc}</td>
+                                  <td className="font-black text-slate-900 text-right whitespace-nowrap">{formatCurrency(item.amount)}</td>
                                 </tr>
                               ))
                             )}

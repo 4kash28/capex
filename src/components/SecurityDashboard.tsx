@@ -14,8 +14,8 @@ export default function SecurityDashboard({
 }) {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm text-center">
-        <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-4">
+      <div className="card-2d p-8 text-center">
+        <div className="w-16 h-16 bg-slate-900 border-2 border-slate-900 flex items-center justify-center mx-auto mb-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
           <Shield className="w-8 h-8 text-white" />
         </div>
         <h2 className="text-2xl font-black text-slate-900 uppercase tracking-widest mb-2">Security Portal</h2>
@@ -25,7 +25,7 @@ export default function SecurityDashboard({
       <BillStatus entries={entries} onUpdateStatus={onInward} userRole="security" />
 
       {/* Recent Activity Logs */}
-      <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
+      <div className="card-2d p-8">
         <h3 className="text-lg font-black text-slate-900 uppercase tracking-widest mb-6 flex items-center gap-2">
           <Clock className="w-5 h-5 text-slate-400" />
           Recent Activity Logs
@@ -35,7 +35,7 @@ export default function SecurityDashboard({
             <p className="text-sm text-slate-500 font-medium text-center py-4">No recent activity.</p>
           ) : (
             notifications.slice(0, 5).map((note) => (
-              <div key={note.id} className="flex gap-4 p-4 rounded-xl bg-slate-50 border border-slate-100">
+              <div key={note.id} className="flex gap-4 p-4 border-2 border-slate-900 bg-slate-50 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
                 <div className="mt-0.5">
                   {note.type === 'success' ? <CheckCircle2 className="w-5 h-5 text-emerald-500" /> :
                    note.type === 'warning' ? <AlertCircle className="w-5 h-5 text-amber-500" /> :

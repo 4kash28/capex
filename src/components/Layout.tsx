@@ -31,10 +31,10 @@ const NavItem: React.FC<NavItemProps> = ({ icon: Icon, label, active, onClick })
   <button
     onClick={onClick}
     className={cn(
-      "flex items-center gap-2 px-4 py-2 rounded-md transition-all duration-200 font-medium text-sm",
+      "flex items-center gap-2 px-4 py-2 transition-none font-medium text-sm border-l-2",
       active 
-        ? "bg-blue-600 text-white" 
-        : "text-slate-300 hover:bg-slate-800 hover:text-white"
+        ? "bg-slate-800 text-white border-blue-500" 
+        : "text-slate-300 border-transparent hover:bg-slate-800 hover:text-white"
     )}
   >
     <Icon className="w-4 h-4" />
@@ -308,9 +308,19 @@ export default function Layout({ children, activePage, setActivePage, isAdmin, u
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.2 }}
+            className="pb-8"
           >
             {children}
           </motion.div>
+
+          <div className="mt-12 pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <p className="text-xs font-medium text-slate-400">
+              &copy; {new Date().getFullYear()} ITBMS Portal. All rights reserved.
+            </p>
+            <p className="text-sm font-medium text-slate-500 flex items-center gap-2">
+              Designed & Developed by <span className="font-black text-slate-800 tracking-tight">ARtecH Group</span>
+            </p>
+          </div>
         </div>
       </main>
     </div>

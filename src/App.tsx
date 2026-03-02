@@ -147,20 +147,24 @@ export default function App() {
       }
     };
     fetchProfile();
-  }, [session]);
+  }, [session?.user?.email]);
 
   const fetchNotifications = useCallback(async () => {
     let notes: AppNotification[] = [];
+    const userId = session?.user?.id || session?.user?.email || 'local_user';
     try {
+      const userEmail = session?.user?.email?.toLowerCase() || '';
+      const isOldUser = userEmail.includes('admin') || userEmail.includes('user1');
+
       if (isOffline || !isSupabaseConfigured) {
-        notes = await localDB.getAll<AppNotification>('notifications');
+        notes = (await localDB.getAll<AppNotification>('notifications')).filter(n => !n.user_id ? isOldUser : n.user_id === userId);
       } else {
         const { data, error } = await supabase.from('notifications').select('*');
         if (error) {
           if (error.code !== 'PGRST205') console.error('Error fetching notifications:', error);
-          notes = await localDB.getAll<AppNotification>('notifications');
+          notes = (await localDB.getAll<AppNotification>('notifications')).filter(n => !n.user_id ? isOldUser : n.user_id === userId);
         } else {
-          notes = data || [];
+          notes = (data || []).filter(n => !n.user_id ? isOldUser : n.user_id === userId);
         }
       }
 
@@ -169,6 +173,7 @@ export default function App() {
         notes = [
           {
             id: 'mock-1',
+            user_id: userId,
             message: 'System initialized and ready for updates.',
             type: 'info',
             created_at: new Date(Date.now() - 3600000).toISOString(),
@@ -176,6 +181,7 @@ export default function App() {
           },
           {
             id: 'mock-2',
+            user_id: userId,
             message: 'Vendor Portal is now active for all assigned vendors.',
             type: 'success',
             created_at: new Date(Date.now() - 7200000).toISOString(),
@@ -188,7 +194,7 @@ export default function App() {
     }
     
     setNotifications(notes.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
-  }, [isOffline]);
+  }, [isOffline, session?.user?.id, session?.user?.email]);
 
   useEffect(() => {
     fetchNotifications();
@@ -199,6 +205,29 @@ export default function App() {
   }, [fetchNotifications]);
 
   const handleLogout = async () => {
+    // Clear all state on logout to prevent data leakage
+    setVendors([]);
+    setDepartments([]);
+    setCapexEntries([]);
+    setBillingRecords([]);
+    setStats({
+      totalBudget: 0,
+      monthlyLimit: 0,
+      totalConsumed: 0,
+      monthlyConsumed: 0,
+      remainingBudget: 0,
+      billingTotalBudget: 0,
+      billingMonthlyLimit: 0,
+      billingTotalConsumed: 0,
+      billingMonthlyConsumed: 0,
+      billingRemainingBudget: 0
+    });
+    setTotalBudget(0);
+    setMonthlyLimit(0);
+    setBillingTotalBudget(0);
+    setBillingMonthlyLimit(0);
+    setNotifications([]);
+
     if (isOffline) {
       setIsOffline(false);
       setSession(null);
@@ -264,11 +293,17 @@ export default function App() {
     if (isOffline || !isSupabaseConfigured) {
       try {
         await localDB.initMockData();
-        const vendors = await localDB.getAll<Vendor>('vendors');
-        const departments = await localDB.getAll<Department>('departments');
-        const capex = await localDB.getAll<CapexEntry>('capex_entries');
-        const billing = await localDB.getAll<BillingRecord>('billing_records');
-        const settings = await localDB.getAll<{key: string, value: string}>('settings');
+        const userId = session?.user?.email || 'local_user';
+        const userEmail = session?.user?.email?.toLowerCase() || '';
+        const isOldUser = userEmail.includes('admin') || userEmail.includes('user1');
+
+        const filterLocal = (items: any[]) => items.filter(item => !item.user_id ? isOldUser : item.user_id === userId);
+
+        const vendors = filterLocal(await localDB.getAll<Vendor>('vendors'));
+        const departments = filterLocal(await localDB.getAll<Department>('departments'));
+        const capex = filterLocal(await localDB.getAll<CapexEntry>('capex_entries'));
+        const billing = filterLocal(await localDB.getAll<BillingRecord>('billing_records'));
+        const settings = filterLocal(await localDB.getAll<{key: string, value: string, user_id?: string}>('settings'));
 
         setVendors(vendors);
         setDepartments(departments);
@@ -309,6 +344,17 @@ export default function App() {
     }
 
     try {
+      const userId = session?.user?.id;
+      if (!userId) {
+        // Clear state if no user
+        setVendors([]);
+        setDepartments([]);
+        setCapexEntries([]);
+        setBillingRecords([]);
+        setLoading(false);
+        return;
+      }
+
       const [vRes, dRes, cRes, bRes, sRes] = await Promise.all([
         supabase.from('vendors').select('*').order('name'),
         supabase.from('departments').select('*').order('name'),
@@ -340,11 +386,28 @@ export default function App() {
         }
       }
 
-      if (vRes.data) setVendors(vRes.data);
-      if (dRes.data) setDepartments(dRes.data);
-      if (cRes.data) setCapexEntries(cRes.data);
+      const userEmail = session?.user?.email?.toLowerCase() || '';
+      const isOldUser = userEmail.includes('admin') || userEmail.includes('user1');
+
+      const filterData = (data: any[]) => {
+        if (!data) return [];
+        return data.filter(item => {
+          if (!item.user_id) return isOldUser;
+          return item.user_id === userId;
+        });
+      };
+
+      if (vRes.data) setVendors(filterData(vRes.data));
+      else if (!vRes.error) setVendors([]);
+      
+      if (dRes.data) setDepartments(filterData(dRes.data));
+      else if (!dRes.error) setDepartments([]);
+      
+      if (cRes.data) setCapexEntries(filterData(cRes.data));
+      else if (!cRes.error) setCapexEntries([]);
+      
       if (bRes.data) {
-        setBillingRecords(bRes.data.sort((a: any, b: any) => {
+        setBillingRecords(filterData(bRes.data).sort((a: any, b: any) => {
           const timeA = new Date(a.updated_at || a.created_at || a.bill_date || 0).getTime();
           const timeB = new Date(b.updated_at || b.created_at || b.bill_date || 0).getTime();
           return timeB - timeA;
@@ -357,10 +420,11 @@ export default function App() {
       let bLimit = 0;
       
       if (sRes.data) {
-        const budget = sRes.data.find(s => s.key === 'total_capex_budget');
-        const limit = sRes.data.find(s => s.key === 'monthly_capex_limit');
-        const billingBudget = sRes.data.find(s => s.key === 'total_billing_budget');
-        const billingLimit = sRes.data.find(s => s.key === 'monthly_billing_limit');
+        const filteredSettings = filterData(sRes.data);
+        const budget = filteredSettings.find(s => s.key === 'total_capex_budget');
+        const limit = filteredSettings.find(s => s.key === 'monthly_capex_limit');
+        const billingBudget = filteredSettings.find(s => s.key === 'total_billing_budget');
+        const billingLimit = filteredSettings.find(s => s.key === 'monthly_billing_limit');
 
         if (budget) currentBudget = Number(budget.value);
         if (limit) currentLimit = Number(limit.value);
@@ -372,7 +436,7 @@ export default function App() {
       setMonthlyLimit(currentLimit);
       setBillingTotalBudget(bBudget);
       setBillingMonthlyLimit(bLimit);
-      calculateStats(cRes.data || [], bRes.data || [], currentBudget, currentLimit, bBudget, bLimit);
+      calculateStats(filterData(cRes.data || []), filterData(bRes.data || []), currentBudget, currentLimit, bBudget, bLimit);
 
     } catch (error: any) {
       console.error('Error fetching data:', error);
@@ -383,7 +447,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [calculateStats, totalBudget, monthlyLimit, sessionChecked, isOffline]);
+  }, [calculateStats, sessionChecked, isOffline, session?.user?.id, session?.user?.email]);
 
   useEffect(() => {
     fetchData();
@@ -396,6 +460,7 @@ export default function App() {
 
   const handleAddCapex = async (data: any) => {
     let newEntries = [...capexEntries];
+    const userId = session?.user?.id || session?.user?.email || 'local_user';
     if (isOffline || !isSupabaseConfigured) {
       const vendor = vendors.find(v => v.id === data.vendor_id);
       const department = departments.find(d => d.id === data.department_id);
@@ -403,7 +468,8 @@ export default function App() {
         ...data, 
         id: Math.random().toString(), 
         vendor, 
-        department
+        department,
+        user_id: userId
       };
       await localDB.add('capex_entries', newEntry);
       await fetchData();
@@ -420,10 +486,12 @@ export default function App() {
         supabaseData.remarks = (supabaseData.remarks ? supabaseData.remarks + " | " : "") + `Vendor: ${manual_vendor_name}`;
       }
 
+      supabaseData.user_id = userId;
+
       const { error } = await supabase.from('capex_entries').insert([supabaseData]);
       if (error) throw error;
       await fetchData();
-      const { data: cRes } = await supabase.from('capex_entries').select('*');
+      const { data: cRes } = await supabase.from('capex_entries').select('*').eq('user_id', userId);
       if (cRes) newEntries = cRes;
     }
 
@@ -525,6 +593,7 @@ export default function App() {
 
     const notification: AppNotification = {
       id: Math.random().toString(),
+      user_id: session?.user?.id || session?.user?.email || 'local_user',
       message,
       type: status === 'issue' || status === 'delayed' ? 'warning' : 'info',
       created_at: new Date().toISOString(),
@@ -545,12 +614,15 @@ export default function App() {
   };
 
   const handleAddVendor = async (vendor: Partial<Vendor>) => {
+    const userId = session?.user?.id || session?.user?.email || 'local_user';
+    const vendorWithUser = { ...vendor, user_id: userId };
+    
     if (isOffline || !isSupabaseConfigured) {
-      await localDB.add('vendors', { ...vendor, id: Math.random().toString() } as Vendor);
+      await localDB.add('vendors', { ...vendorWithUser, id: Math.random().toString() } as Vendor);
       await fetchData();
       return;
     }
-    const { error } = await supabase.from('vendors').insert([vendor]);
+    const { error } = await supabase.from('vendors').insert([vendorWithUser]);
     if (error) throw error;
     await fetchData();
   };
@@ -607,11 +679,13 @@ export default function App() {
   }, []);
 
   const handleUpdateSettings = async (newBudget: number, newLimit: number, newBBudget: number, newBLimit: number) => {
+    const userId = session?.user?.id || session?.user?.email || 'local_user';
+    
     if (isOffline || !isSupabaseConfigured) {
-      await localDB.update('settings', { key: 'total_capex_budget', value: newBudget.toString() });
-      await localDB.update('settings', { key: 'monthly_capex_limit', value: newLimit.toString() });
-      await localDB.update('settings', { key: 'total_billing_budget', value: newBBudget.toString() });
-      await localDB.update('settings', { key: 'monthly_billing_limit', value: newBLimit.toString() });
+      await localDB.update('settings', { key: 'total_capex_budget', value: newBudget.toString(), user_id: userId });
+      await localDB.update('settings', { key: 'monthly_capex_limit', value: newLimit.toString(), user_id: userId });
+      await localDB.update('settings', { key: 'total_billing_budget', value: newBBudget.toString(), user_id: userId });
+      await localDB.update('settings', { key: 'monthly_billing_limit', value: newBLimit.toString(), user_id: userId });
       await fetchData();
       alert('Settings updated locally!');
       return;
@@ -620,10 +694,10 @@ export default function App() {
     try {
       // Upsert settings to ensure they are created if they don't exist
       await Promise.all([
-        supabase.from('settings').upsert({ key: 'total_capex_budget', value: newBudget.toString() }, { onConflict: 'key' }),
-        supabase.from('settings').upsert({ key: 'monthly_capex_limit', value: newLimit.toString() }, { onConflict: 'key' }),
-        supabase.from('settings').upsert({ key: 'total_billing_budget', value: newBBudget.toString() }, { onConflict: 'key' }),
-        supabase.from('settings').upsert({ key: 'monthly_billing_limit', value: newBLimit.toString() }, { onConflict: 'key' })
+        supabase.from('settings').upsert({ key: 'total_capex_budget', value: newBudget.toString(), user_id: userId }, { onConflict: 'key,user_id' }),
+        supabase.from('settings').upsert({ key: 'monthly_capex_limit', value: newLimit.toString(), user_id: userId }, { onConflict: 'key,user_id' }),
+        supabase.from('settings').upsert({ key: 'total_billing_budget', value: newBBudget.toString(), user_id: userId }, { onConflict: 'key,user_id' }),
+        supabase.from('settings').upsert({ key: 'monthly_billing_limit', value: newBLimit.toString(), user_id: userId }, { onConflict: 'key,user_id' })
       ]);
       await fetchData();
       alert('Settings updated successfully!');
@@ -635,12 +709,15 @@ export default function App() {
 
   const handleAddBillingRecord = async (data: any) => {
     let newRecords = [...billingRecords];
+    const userId = session?.user?.id || session?.user?.email || 'local_user';
+    
     if (isOffline || !isSupabaseConfigured) {
       const vendor = vendors.find(v => v.id === data.vendor_id);
       const newRecord = { 
         ...data, 
         id: Math.random().toString(), 
         vendor,
+        user_id: userId,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
@@ -652,13 +729,15 @@ export default function App() {
       const { manual_vendor_name, ...supabaseData } = data;
       
       if (manual_vendor_name) {
-        supabaseData.remarks = (supabaseData.remarks ? supabaseData.remarks + " | " : "") + `Vendor: ${manual_vendor_name}`;
+        supabaseData.manual_vendor_name = manual_vendor_name;
       }
+      
+      supabaseData.user_id = userId;
 
       const { error } = await supabase.from('billing_records').insert([supabaseData]);
       if (error) throw error;
       await fetchData();
-      const { data: bRes } = await supabase.from('billing_records').select('*');
+      const { data: bRes } = await supabase.from('billing_records').select('*').eq('user_id', userId);
       if (bRes) newRecords = bRes;
     }
 
@@ -826,10 +905,6 @@ export default function App() {
         localStorage.setItem('local_session', email);
         setSession({ user: { email: email } } as any);
       }} 
-      onOfflineLogin={() => {
-        setIsOffline(true);
-        setSession({ user: { email: 'offline@local' } } as any);
-      }}
     />;
   }
 

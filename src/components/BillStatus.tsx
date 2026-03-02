@@ -47,10 +47,10 @@ export default function BillStatus({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 card-2d p-6">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">Bill Status Tracker</h2>
-          <p className="text-sm text-slate-500 mt-1">Track and update the progress of vendor invoices</p>
+          <h2 className="text-xl font-black text-slate-900 uppercase tracking-widest">Bill Status Tracker</h2>
+          <p className="text-sm text-slate-500 mt-1 font-bold">Track and update the progress of vendor invoices</p>
         </div>
         <div className="relative w-full sm:w-72">
           <Search className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -59,31 +59,31 @@ export default function BillStatus({
             placeholder="Search projects or vendors..." 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 focus:border-blue-500 outline-none transition-all"
+            className="input-2d w-full !pl-10"
           />
         </div>
       </div>
 
       <div className="space-y-4">
         {filteredEntries.length === 0 ? (
-          <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center">
+          <div className="card-2d p-12 text-center">
             <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-            <h3 className="text-lg font-bold text-slate-900">No entries found</h3>
-            <p className="text-slate-500">Try adjusting your search</p>
+            <h3 className="text-lg font-black text-slate-900 uppercase tracking-widest">No entries found</h3>
+            <p className="text-slate-500 font-bold">Try adjusting your search</p>
           </div>
         ) : (
           filteredEntries.slice(0, 1).map(entry => {
             const currentIndex = getStepIndex(entry.invoice_status);
             
             return (
-              <div key={entry.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+              <div key={entry.id} className="card-2d p-6">
                 <div className="relative mt-2">
                   {/* Progress Bar Background */}
-                  <div className="absolute top-5 left-0 w-full h-1 bg-slate-100 rounded-full -z-10"></div>
+                  <div className="absolute top-5 left-0 w-full h-2 bg-slate-100 border-y-2 border-slate-900 -z-10"></div>
                   
                   {/* Active Progress Bar */}
                   <div 
-                    className="absolute top-5 left-0 h-1 bg-blue-600 rounded-full -z-10 transition-all duration-500"
+                    className="absolute top-5 left-0 h-2 bg-blue-600 border-y-2 border-slate-900 -z-10 transition-all duration-500"
                     style={{ 
                       width: currentIndex >= 0 ? `${(currentIndex / (STATUS_STEPS.length - 1)) * 100}%` : '0%' 
                     }}
@@ -113,10 +113,10 @@ export default function BillStatus({
                           }}
                         >
                           <div className={cn(
-                            "w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 border-4 bg-white",
-                            isCompleted ? "border-blue-600 text-blue-600" : "border-slate-200 text-slate-300",
-                            isCurrent && "shadow-[0_0_0_4px_rgba(37,99,235,0.1)] scale-110",
-                            isNext && "border-blue-200 text-blue-300 group-hover:border-blue-400"
+                            "w-10 h-10 flex items-center justify-center transition-all duration-300 border-2 bg-white",
+                            isCompleted ? "border-slate-900 bg-blue-100 text-blue-600 shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]" : "border-slate-300 text-slate-300",
+                            isCurrent && "scale-110",
+                            isNext && "border-blue-200 text-blue-300 group-hover:border-blue-400 group-hover:shadow-[2px_2px_0px_0px_rgba(15,23,42,1)]"
                           )}>
                             {isCompleted ? (
                               <CheckCircle2 className="w-5 h-5" />
@@ -127,7 +127,7 @@ export default function BillStatus({
                             )}
                           </div>
                           <span className={cn(
-                            "text-xs font-bold text-center max-w-[80px] leading-tight",
+                            "text-[10px] font-black uppercase tracking-widest text-center max-w-[80px] leading-tight mt-2",
                             isCompleted ? "text-slate-900" : "text-slate-400"
                           )}>
                             {step.label}

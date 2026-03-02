@@ -87,8 +87,8 @@ export default function CapexEntryForm({
 
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-        <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+      <div className="card-2d overflow-hidden">
+        <div className="p-6 border-b border-slate-200 bg-slate-50">
           <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight">New Capex Entry</h3>
           <p className="text-xs text-slate-500">Record a new capital expenditure for tracking and approval.</p>
         </div>
@@ -100,7 +100,7 @@ export default function CapexEntryForm({
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Vendor Name</label>
               <select 
                 {...register('vendor_id')}
-                className="w-full px-4 py-2 rounded-md border border-slate-200 focus:border-blue-500 outline-none transition-all text-sm"
+                className="input-2d w-full"
               >
                 <option value="">Select Vendor</option>
                 {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
@@ -113,7 +113,7 @@ export default function CapexEntryForm({
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Department</label>
               <select 
                 {...register('department_id')}
-                className="w-full px-4 py-2 rounded-md border border-slate-200 focus:border-blue-500 outline-none transition-all text-sm"
+                className="input-2d w-full"
               >
                 <option value="">Select Department</option>
                 {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -130,7 +130,7 @@ export default function CapexEntryForm({
                   type="text"
                   {...register('manual_department_name')}
                   placeholder="Type department name here..."
-                  className="w-full px-4 py-2 rounded-md border border-slate-200 focus:border-blue-500 outline-none transition-all text-sm"
+                  className="input-2d w-full"
                 />
                 {errors.manual_department_name && <p className="text-xs text-red-500 mt-1">{errors.manual_department_name.message}</p>}
               </div>
@@ -141,7 +141,7 @@ export default function CapexEntryForm({
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Service Category</label>
               <select 
                 {...register('category')}
-                className="w-full px-4 py-2 rounded-md border border-slate-200 focus:border-blue-500 outline-none transition-all text-sm"
+                className="input-2d w-full"
               >
                 <option value="">Select Category</option>
                 {categories.map(c => <option key={c} value={c}>{c}</option>)}
@@ -157,7 +157,7 @@ export default function CapexEntryForm({
                   type="text"
                   {...register('manual_category')}
                   placeholder="Type category name here..."
-                  className="w-full px-4 py-2 rounded-md border border-slate-200 focus:border-blue-500 outline-none transition-all text-sm"
+                  className="input-2d w-full"
                 />
                 {errors.manual_category && <p className="text-xs text-red-500 mt-1">{errors.manual_category.message}</p>}
               </div>
@@ -170,7 +170,7 @@ export default function CapexEntryForm({
                 type="number"
                 {...register('amount', { valueAsNumber: true })}
                 placeholder="0.00"
-                className="w-full px-4 py-2 rounded-md border border-slate-200 focus:border-blue-500 outline-none transition-all text-sm"
+                className="input-2d w-full"
               />
               {errors.amount && <p className="text-xs text-red-500 mt-1">{errors.amount.message}</p>}
             </div>
@@ -181,7 +181,7 @@ export default function CapexEntryForm({
               <input 
                 type="date"
                 {...register('entry_date')}
-                className="w-full px-4 py-2 rounded-md border border-slate-200 focus:border-blue-500 outline-none transition-all text-sm"
+                className="input-2d w-full"
               />
               {errors.entry_date && <p className="text-xs text-red-500 mt-1">{errors.entry_date.message}</p>}
             </div>
@@ -198,7 +198,7 @@ export default function CapexEntryForm({
                 />
                 <label 
                   htmlFor="invoice-upload"
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-md border border-slate-200 hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all text-slate-500 text-sm"
+                  className="input-2d w-full flex items-center justify-center gap-2 cursor-pointer text-slate-500 hover:bg-slate-50"
                 >
                   <Upload className="w-4 h-4" />
                   <span>Choose PDF file</span>
@@ -214,7 +214,7 @@ export default function CapexEntryForm({
               {...register('description')}
               rows={3}
               placeholder="Provide details about the expenditure..."
-              className="w-full px-4 py-2 rounded-md border border-slate-200 focus:border-blue-500 outline-none transition-all resize-none text-sm"
+              className="input-2d w-full resize-none"
             />
             {errors.description && <p className="text-xs text-red-500 mt-1">{errors.description.message}</p>}
           </div>
@@ -225,7 +225,7 @@ export default function CapexEntryForm({
             <input 
               {...register('remarks')}
               placeholder="Any additional notes..."
-              className="w-full px-4 py-2 rounded-md border border-slate-200 focus:border-blue-500 outline-none transition-all text-sm"
+              className="input-2d w-full"
             />
           </div>
 
@@ -233,14 +233,14 @@ export default function CapexEntryForm({
             <button 
               type="button"
               onClick={() => reset()}
-              className="px-6 py-2 rounded-md border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-all"
+              className="btn-2d-outline"
             >
               Cancel
             </button>
             <button 
               type="submit"
               disabled={isSubmitting}
-              className="px-8 py-2 rounded-md bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 transition-all flex items-center gap-2 disabled:opacity-50"
+              className="btn-2d flex items-center gap-2 disabled:opacity-50"
             >
               {isSubmitting ? 'Saving...' : (
                 <>

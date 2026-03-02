@@ -22,8 +22,6 @@ import {
 } from 'recharts';
 import { formatCurrency, formatDate, cn } from '../lib/utils';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 
 export default function Reports({ 
   billingRecords 

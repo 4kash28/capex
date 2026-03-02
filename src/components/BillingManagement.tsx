@@ -16,8 +16,8 @@ import {
 import { formatCurrency, formatDate, cn } from '../lib/utils';
 import { BillingRecord, Vendor } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+
+import { generateProfessionalPDF } from '../lib/pdfGenerator';
 
 const GST_RATES = [0, 0.25, 3, 5, 12, 18, 28];
 
@@ -39,71 +39,40 @@ export default function BillingManagement({
   const [manualVendorName, setManualVendorName] = useState<string>('');
 
   const generatePDF = (record: BillingRecord) => {
-    const doc = new jsPDF();
-    
-    // Header
-    doc.setFontSize(20);
-    doc.setTextColor(11, 18, 33); // Slate 900
-    doc.text('Billing Expenditure Report', 14, 22);
-    
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30);
-    
-    // Vendor Info
-    doc.setFontSize(12);
-    doc.setTextColor(0);
-    doc.text('Vendor Details', 14, 45);
-    doc.line(14, 47, 60, 47);
-    
-    doc.setFontSize(10);
-    doc.text(`Name: ${record.manual_vendor_name || record.vendor?.name || 'N/A'}`, 14, 55);
-    doc.text(`Service: ${record.service_type}`, 14, 62);
-    doc.text(`Invoice No: ${record.invoice_number || 'N/A'}`, 14, 69);
-    doc.text(`Billing Date: ${formatDate(record.bill_date)}`, 14, 76);
-
-    // Financial Table
-    autoTable(doc, {
-      startY: 85,
-      head: [['Description', 'Rate (%)', 'Amount (INR)']],
-      body: [
-        ['Base Amount', '-', formatCurrency(record.amount).replace('₹', 'Rs. ')],
-        [
-          record.gst_type === 'CGST + SGST' ? 'CGST' : 'GST',
-          record.gst_type === 'CGST + SGST' ? `${record.cgst_rate}%` : `${record.gst_rate}%`,
-          formatCurrency(record.gst_type === 'CGST + SGST' ? (record.gst_amount || 0) / 2 : (record.gst_amount || 0)).replace('₹', 'Rs. ')
-        ],
-        ...(record.gst_type === 'CGST + SGST' ? [[
-          'SGST',
-          `${record.sgst_rate}%`,
-          formatCurrency((record.gst_amount || 0) / 2).replace('₹', 'Rs. ')
-        ]] : []),
-        [{ content: 'Total Payable', styles: { fontStyle: 'bold' } }, '-', { content: formatCurrency(record.total_amount).replace('₹', 'Rs. '), styles: { fontStyle: 'bold' } }]
-      ],
-      theme: 'striped',
-      headStyles: { fillColor: [11, 18, 33] },
-    });
-
-    // Remarks
-    if (record.remarks) {
-      const finalY = (doc as any).lastAutoTable.finalY || 150;
-      doc.setFontSize(12);
-      doc.text('Internal Remarks', 14, finalY + 15);
-      doc.setFontSize(10);
-      doc.setTextColor(100);
-      const splitRemarks = doc.splitTextToSize(record.remarks, 180);
-      doc.text(splitRemarks, 14, finalY + 22);
-    }
-
-    // Footer
-    const pageCount = doc.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
-      doc.setPage(i);
-      doc.setFontSize(8);
-      doc.setTextColor(150);
-      doc.text('Confidential - IT Expenditure Audit Protocol V3.0', 14, doc.internal.pageSize.height - 10);
-      doc.text(`Page ${i} of ${pageCount}`, doc.internal.pageSize.width - 30, doc.internal.pageSize.height - 10);
-    }
+    const doc = generateProfessionalPDF({
+      title: 'Billing Expenditure Report',
+      subtitle: `Invoice: ${record.invoice_number || 'N/A'}`,
+      metadata: {
+        'Vendor Name': record.manual_vendor_name || record.vendor?.name || 'N/A',
+        'Service Type': record.service_type,
+        'Billing Date': formatDate(record.bill_date),
+        'Payment Status': record.payment_status,
+      }
+    }, [
+      {
+        title: 'Financial Details',
+        headers: ['Description', 'Rate (%)', 'Amount (INR)'],
+        rows: [
+          ['Base Amount', '-', formatCurrency(record.amount).replace('₹', 'Rs. ')],
+          [
+            record.gst_type === 'CGST + SGST' ? 'CGST' : 'GST',
+            record.gst_type === 'CGST + SGST' ? `${record.cgst_rate}%` : `${record.gst_rate}%`,
+            formatCurrency(record.gst_type === 'CGST + SGST' ? (record.gst_amount || 0) / 2 : (record.gst_amount || 0)).replace('₹', 'Rs. ')
+          ],
+          ...(record.gst_type === 'CGST + SGST' ? [[
+            'SGST',
+            `${record.sgst_rate}%`,
+            formatCurrency((record.gst_amount || 0) / 2).replace('₹', 'Rs. ')
+          ]] : []),
+          [{ content: 'Total Payable', styles: { fontStyle: 'bold' } }, '-', { content: formatCurrency(record.total_amount).replace('₹', 'Rs. '), styles: { fontStyle: 'bold' } }]
+        ]
+      },
+      ...(record.remarks ? [{
+        title: 'Internal Remarks',
+        headers: ['Remarks'],
+        rows: [[record.remarks]]
+      }] : [])
+    ]);
 
     doc.save(`Invoice_${record.invoice_number || record.id}.pdf`);
   };
