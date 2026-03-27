@@ -13,7 +13,10 @@ import {
   Bell,
   Shield,
   Truck,
-  FileText
+  FileText,
+  AlertCircle,
+  CheckCircle,
+  Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -113,13 +116,16 @@ export default function Layout({ children, activePage, setActivePage, isAdmin, u
       { id: 'billing', label: 'Monthly Billing', icon: Receipt },
       { id: 'reports', label: 'Reports', icon: BarChart3 },
       { id: 'vendors', label: 'Vendors', icon: Users },
-      { id: 'bill_status', label: 'Bill Status', icon: FileText },
+      { id: 'documents', label: 'PO & Invoice Records', icon: FileText },
     ] : []),
     ...(userProfile?.role === 'vendor' ? [
       { id: 'vendor_portal', label: 'Vendor Portal', icon: Truck },
     ] : []),
     ...(userProfile?.role === 'security' ? [
       { id: 'security_portal', label: 'Security Portal', icon: Shield },
+    ] : []),
+    ...(userProfile?.role === 'accounts' ? [
+      { id: 'accounts_portal', label: 'Accounts Portal', icon: FileText },
     ] : []),
     ...(isAdmin && (userProfile?.role === 'admin' || userProfile?.role === 'user') ? [{ id: 'settings', label: 'Settings', icon: Settings }] : []),
   ];
@@ -131,8 +137,8 @@ export default function Layout({ children, activePage, setActivePage, isAdmin, u
         <div className="max-w-[1600px] mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center font-bold text-xl">S</div>
-              <span className="font-bold text-lg tracking-tight hidden sm:block">ITBMS</span>
+              <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center font-bold text-xl">A</div>
+              <span className="font-bold text-lg tracking-tight hidden sm:block">ARtecH ITBMS</span>
               <div 
                 className={cn(
                   "w-2.5 h-2.5 rounded-full ml-2 cursor-pointer transition-all hover:scale-125",
@@ -199,9 +205,21 @@ export default function Layout({ children, activePage, setActivePage, isAdmin, u
                         <div className="p-8 text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest">No notifications</div>
                       ) : (
                         notifications.map(note => (
-                          <div key={note.id} className="p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                            <p className="text-xs text-slate-800 font-medium mb-1">{note.message}</p>
-                            <span className="text-[10px] text-slate-400 font-bold">{new Date(note.created_at).toLocaleTimeString()}</span>
+                          <div key={note.id} className="p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors flex gap-3 items-start">
+                            <div className={cn(
+                              "mt-0.5 p-1.5 rounded-full",
+                              note.type === 'warning' ? 'bg-amber-100 text-amber-600' : 
+                              note.type === 'success' ? 'bg-emerald-100 text-emerald-600' : 
+                              'bg-blue-100 text-blue-600'
+                            )}>
+                              {note.type === 'warning' ? <AlertCircle className="w-3 h-3" /> : 
+                               note.type === 'success' ? <CheckCircle className="w-3 h-3" /> : 
+                               <Info className="w-3 h-3" />}
+                            </div>
+                            <div>
+                              <p className="text-xs text-slate-800 font-medium mb-1">{note.message}</p>
+                              <span className="text-[10px] text-slate-400 font-bold">{new Date(note.created_at).toLocaleTimeString()}</span>
+                            </div>
                           </div>
                         ))
                       )}
@@ -280,11 +298,27 @@ export default function Layout({ children, activePage, setActivePage, isAdmin, u
                 exit={{ opacity: 0, x: 100 }}
                 className="fixed top-20 right-8 bg-slate-900 text-white p-4 rounded-xl shadow-2xl z-[100] border border-white/10 flex items-center gap-4 max-w-md"
               >
-                <div className="p-2 bg-blue-600 rounded-lg">
-                  <Bell className="w-5 h-5 text-white" />
+                <div className={cn(
+                  "p-2 rounded-lg",
+                  recentPopup.type === 'warning' ? 'bg-amber-500' : 
+                  recentPopup.type === 'success' ? 'bg-emerald-500' : 
+                  'bg-blue-600'
+                )}>
+                  {recentPopup.type === 'warning' ? <AlertCircle className="w-5 h-5 text-white" /> : 
+                   recentPopup.type === 'success' ? <CheckCircle className="w-5 h-5 text-white" /> : 
+                   <Bell className="w-5 h-5 text-white" />}
                 </div>
                 <div>
-                  <h4 className="text-[10px] font-black uppercase tracking-widest text-blue-400 mb-1">New Update</h4>
+                  <h4 className={cn(
+                    "text-[10px] font-black uppercase tracking-widest mb-1",
+                    recentPopup.type === 'warning' ? 'text-amber-400' : 
+                    recentPopup.type === 'success' ? 'text-emerald-400' : 
+                    'text-blue-400'
+                  )}>
+                    {recentPopup.type === 'warning' ? 'Alert' : 
+                     recentPopup.type === 'success' ? 'Success' : 
+                     'New Update'}
+                  </h4>
                   <p className="text-xs font-bold leading-relaxed">{recentPopup.message}</p>
                 </div>
                 <button onClick={() => setRecentPopup(null)} className="p-1 hover:bg-white/10 rounded">

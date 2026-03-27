@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'user' | 'vendor' | 'security';
+export type UserRole = 'admin' | 'user' | 'vendor' | 'security' | 'accounts';
 
 export interface Vendor {
   id: string;
@@ -64,7 +64,9 @@ export interface BillingRecord {
   gst_type?: 'CGST + SGST' | 'IGST' | 'Exempted';
   total_amount: number;
   bill_url?: string; // Invoice attachment
+  bill_file_name?: string;
   po_url?: string; // PO attachment
+  po_file_name?: string;
   remarks?: string;
   payment_status: 'Paid' | 'Pending' | 'PO Pending';
   vendor?: Vendor;

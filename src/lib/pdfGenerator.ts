@@ -54,7 +54,7 @@ export const generateProfessionalPDF = (
   doc.setFontSize(22);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...primaryColor);
-  doc.text('CAPEX TRACKER PRO', 14, currentY);
+  doc.text('ARtecH Group', 14, currentY);
   
   // System ID / Date on the right
   doc.setFontSize(9);
@@ -176,7 +176,6 @@ export const generateProfessionalPDF = (
         textColor: [255, 255, 255],
         fontStyle: 'bold',
         halign: 'left',
-        textTransform: 'uppercase',
         fontSize: 8,
       },
       alternateRowStyles: {

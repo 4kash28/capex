@@ -10,10 +10,12 @@ import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import CapexEntryForm from './components/CapexEntryForm';
 import BillingManagement from './components/BillingManagement';
+import DocumentRecords from './components/DocumentRecords';
 import Reports from './components/Reports';
 import VendorManagement from './components/VendorManagement';
 import VendorDashboard from './components/VendorDashboard';
 import SecurityDashboard from './components/SecurityDashboard';
+import AccountsDashboard from './components/AccountsDashboard';
 import BillStatus from './components/BillStatus';
 import Login from './components/Login';
 import { localDB } from './lib/localDB';
@@ -140,8 +142,13 @@ export default function App() {
         await localDB.initMockData();
         const profiles = await localDB.getAll<any>('user_profiles');
         const profile = profiles.find(p => p.id === session.user.email);
-        const defaultRole = session.user.email.includes('admin') ? 'admin' : 'user';
-        setUserProfile(profile || { id: session.user.email, role: defaultRole, name: defaultRole === 'admin' ? 'Admin' : 'User' });
+        let defaultRole = 'user';
+        if (session.user.email.includes('admin')) defaultRole = 'admin';
+        else if (session.user.email.includes('security')) defaultRole = 'security';
+        else if (session.user.email.includes('accounts')) defaultRole = 'accounts';
+        else if (session.user.email.includes('vendor')) defaultRole = 'vendor';
+        
+        setUserProfile(profile || { id: session.user.email, role: defaultRole, name: defaultRole.charAt(0).toUpperCase() + defaultRole.slice(1) });
       } else {
         setUserProfile(null);
       }
@@ -193,8 +200,91 @@ export default function App() {
       console.error('Notification fetch failed:', e);
     }
     
-    setNotifications(notes.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
-  }, [isOffline, session?.user?.id, session?.user?.email]);
+    // Generate real-time alerts based on current state
+    const dynamicAlerts: AppNotification[] = [];
+    const now = new Date();
+    
+    // 1. Budget Overruns
+    if (stats.totalBudget > 0 && stats.totalConsumed >= stats.totalBudget * 0.9) {
+      dynamicAlerts.push({
+        id: 'alert-budget-total',
+        user_id: userId,
+        message: `CRITICAL: Total Capex Budget is at ${((stats.totalConsumed / stats.totalBudget) * 100).toFixed(1)}% capacity.`,
+        type: 'warning',
+        created_at: now.toISOString(),
+        read: false
+      });
+    }
+    if (stats.monthlyLimit > 0 && stats.monthlyConsumed >= stats.monthlyLimit * 0.9) {
+      dynamicAlerts.push({
+        id: 'alert-budget-monthly',
+        user_id: userId,
+        message: `WARNING: Monthly Capex Limit is at ${((stats.monthlyConsumed / stats.monthlyLimit) * 100).toFixed(1)}% capacity.`,
+        type: 'warning',
+        created_at: now.toISOString(),
+        read: false
+      });
+    }
+    if (stats.billingTotalBudget > 0 && stats.billingTotalConsumed >= stats.billingTotalBudget * 0.9) {
+      dynamicAlerts.push({
+        id: 'alert-billing-total',
+        user_id: userId,
+        message: `CRITICAL: Total Billing Budget is at ${((stats.billingTotalConsumed / stats.billingTotalBudget) * 100).toFixed(1)}% capacity.`,
+        type: 'warning',
+        created_at: now.toISOString(),
+        read: false
+      });
+    }
+    if (stats.billingMonthlyLimit > 0 && stats.billingMonthlyConsumed >= stats.billingMonthlyLimit * 0.9) {
+      dynamicAlerts.push({
+        id: 'alert-billing-monthly',
+        user_id: userId,
+        message: `WARNING: Monthly Billing Limit is at ${((stats.billingMonthlyConsumed / stats.billingMonthlyLimit) * 100).toFixed(1)}% capacity.`,
+        type: 'warning',
+        created_at: now.toISOString(),
+        read: false
+      });
+    }
+    
+    // 2. Upcoming Invoice Due Dates (Assuming 30 days terms)
+    billingRecords.forEach(record => {
+      if (record.payment_status !== 'Paid' && record.bill_date) {
+        const billDate = new Date(record.bill_date);
+        const dueDate = new Date(billDate.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
+        const daysUntilDue = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        
+        const vendorName = record.vendor?.name || record.manual_vendor_name || 'Vendor';
+        const invoiceRef = record.invoice_number || 'Pending Invoice';
+
+        if (daysUntilDue <= 7 && daysUntilDue >= 0) {
+          dynamicAlerts.push({
+            id: `alert-invoice-${record.id}`,
+            user_id: userId,
+            message: `Invoice ${invoiceRef} from ${vendorName} is due in ${daysUntilDue} days.`,
+            type: 'warning',
+            created_at: now.toISOString(),
+            read: false
+          });
+        } else if (daysUntilDue < 0) {
+          dynamicAlerts.push({
+            id: `alert-invoice-overdue-${record.id}`,
+            user_id: userId,
+            message: `CRITICAL: Invoice ${invoiceRef} from ${vendorName} is OVERDUE by ${Math.abs(daysUntilDue)} days.`,
+            type: 'warning',
+            created_at: now.toISOString(),
+            read: false
+          });
+        }
+      }
+    });
+
+    const allNotes = [...dynamicAlerts, ...notes];
+    
+    // Deduplicate by ID
+    const uniqueNotes = Array.from(new Map(allNotes.map(item => [item.id, item])).values());
+    
+    setNotifications(uniqueNotes.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+  }, [isOffline, session?.user?.id, session?.user?.email, stats, billingRecords]);
 
   useEffect(() => {
     fetchNotifications();
@@ -603,7 +693,8 @@ export default function App() {
     if (isOffline || !isSupabaseConfigured) {
       await localDB.add('notifications', notification);
     } else {
-      const { error: nError } = await supabase.from('notifications').insert([notification]);
+      const { id, ...supabaseNotification } = notification;
+      const { error: nError } = await supabase.from('notifications').insert([supabaseNotification]);
       if (nError) {
         console.warn('Could not save notification to Supabase. Fallback to local.', nError.message);
         await localDB.add('notifications', notification);
@@ -726,10 +817,14 @@ export default function App() {
       newRecords = [newRecord, ...billingRecords];
     } else {
       // Strip fields that might not exist in Supabase schema
-      const { manual_vendor_name, ...supabaseData } = data;
+      const { manual_vendor_name, bill_file_name, po_file_name, ...supabaseData } = data;
       
       if (manual_vendor_name) {
         supabaseData.manual_vendor_name = manual_vendor_name;
+      }
+      
+      if (supabaseData.vendor_id && !supabaseData.vendor_id.includes('-')) {
+        delete supabaseData.vendor_id;
       }
       
       supabaseData.user_id = userId;
@@ -760,6 +855,36 @@ export default function App() {
     }
   };
 
+  const handleUpdateBillingRecord = async (id: string, data: any) => {
+    const userId = session?.user?.id || session?.user?.email || 'local_user';
+    
+    if (isOffline || !isSupabaseConfigured) {
+      const vendor = vendors.find(v => v.id === data.vendor_id);
+      const updatedRecord = { 
+        ...data, 
+        id, 
+        vendor,
+        user_id: userId,
+        updated_at: new Date().toISOString()
+      };
+      await localDB.update('billing_records', updatedRecord);
+      await fetchData();
+    } else {
+      const { manual_vendor_name, bill_file_name, po_file_name, ...supabaseData } = data;
+      if (manual_vendor_name) {
+        supabaseData.manual_vendor_name = manual_vendor_name;
+      }
+      if (supabaseData.vendor_id && !supabaseData.vendor_id.includes('-')) {
+        delete supabaseData.vendor_id;
+      }
+      supabaseData.updated_at = new Date().toISOString();
+
+      const { error } = await supabase.from('billing_records').update(supabaseData).eq('id', id);
+      if (error) throw error;
+      await fetchData();
+    }
+  };
+
   const renderPage = (isAdmin: boolean) => {
     if (userProfile?.role === 'vendor') {
       const vendorEntries = userProfile.vendor_id 
@@ -775,6 +900,10 @@ export default function App() {
 
     if (userProfile?.role === 'security') {
       return <SecurityDashboard entries={billingRecords} onInward={handleUpdateInvoiceStatus} notifications={notifications} />;
+    }
+
+    if (userProfile?.role === 'accounts') {
+      return <AccountsDashboard entries={billingRecords} onVerify={handleUpdateInvoiceStatus} notifications={notifications} />;
     }
 
     if (loading) {
@@ -807,6 +936,7 @@ export default function App() {
             vendors={billingVendors} 
             onUpdateStatus={handleUpdateBillingStatus} 
             onAddRecord={handleAddBillingRecord}
+            onUpdateRecord={handleUpdateBillingRecord}
           />
         );
       case 'reports':
@@ -815,6 +945,8 @@ export default function App() {
         return <BillStatus entries={billingRecords} onUpdateStatus={handleUpdateInvoiceStatus} userRole={userProfile?.role || 'user'} />;
       case 'vendors':
         return <VendorManagement vendors={vendors} capexEntries={capexEntries} billingRecords={billingRecords} onAdd={handleAddVendor} onDelete={handleDeleteVendor} isAdmin={isAdmin} />;
+      case 'documents':
+        return <DocumentRecords records={billingRecords} />;
       case 'settings':
         if (!isAdmin) return <div className="p-8 text-center text-slate-500 font-bold">Access Denied. Admin only.</div>;
         return (
@@ -902,8 +1034,10 @@ export default function App() {
   if (!session && !isOffline) {
     return <Login 
       onLogin={(email) => {
-        localStorage.setItem('local_session', email);
-        setSession({ user: { email: email } } as any);
+        if (!isSupabaseConfigured) {
+          localStorage.setItem('local_session', email);
+          setSession({ user: { email: email } } as any);
+        }
       }} 
     />;
   }

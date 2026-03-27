@@ -11,7 +11,8 @@ import {
   FileCheck,
   Calculator,
   ChevronDown,
-  Download
+  Download,
+  Edit
 } from 'lucide-react';
 import { formatCurrency, formatDate, cn } from '../lib/utils';
 import { BillingRecord, Vendor } from '../types';
@@ -25,18 +26,22 @@ export default function BillingManagement({
   records, 
   vendors,
   onUpdateStatus,
-  onAddRecord
+  onAddRecord,
+  onUpdateRecord
 }: { 
   records: BillingRecord[];
   vendors: Vendor[];
   onUpdateStatus: (id: string, status: 'Paid' | 'Pending' | 'PO Pending') => Promise<void>;
   onAddRecord: (data: any) => Promise<void>;
+  onUpdateRecord?: (id: string, data: any) => Promise<void>;
 }) {
-  const [view, setView] = useState<'landing' | 'records' | 'add'>('landing');
+  const [view, setView] = useState<'landing' | 'records' | 'add' | 'edit'>('landing');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Paid' | 'Pending' | 'PO Pending'>('All');
   const [selectedVendorId, setSelectedVendorId] = useState<string>('');
   const [manualVendorName, setManualVendorName] = useState<string>('');
+  const [editingRecord, setEditingRecord] = useState<BillingRecord | null>(null);
+  const [viewingDoc, setViewingDoc] = useState<{url: string, title: string} | null>(null);
 
   const generatePDF = (record: BillingRecord) => {
     const doc = generateProfessionalPDF({
@@ -118,6 +123,18 @@ export default function BillingManagement({
       default:
         return { label: 'Pending', color: 'bg-slate-400 text-white', icon: Clock, border: 'border-slate-500' };
     }
+  };
+
+  const handleEdit = (record: BillingRecord) => {
+    setEditingRecord(record);
+    setSelectedVendorId(record.vendor_id || 'other');
+    setManualVendorName(record.manual_vendor_name || '');
+    setBaseAmount(record.amount);
+    setGstType(record.gst_type as any);
+    setGstRate(record.gst_rate || '');
+    setCgstRate(record.cgst_rate || '');
+    setSgstRate(record.sgst_rate || '');
+    setView('edit');
   };
 
   if (view === 'landing') {
@@ -210,9 +227,9 @@ export default function BillingManagement({
       </div>
 
       <AnimatePresence mode="wait">
-        {view === 'add' ? (
+        {view === 'add' || view === 'edit' ? (
           <motion.div 
-            key="add-form"
+            key={view === 'add' ? 'add-form' : 'edit-form'}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
@@ -222,7 +239,9 @@ export default function BillingManagement({
             
             <div className="flex justify-between items-center mb-8">
               <div>
-                <h3 className="text-lg font-black text-slate-900 uppercase tracking-widest">Record New IT Expenditure</h3>
+                <h3 className="text-lg font-black text-slate-900 uppercase tracking-widest">
+                  {view === 'edit' ? 'Edit IT Expenditure' : 'Record New IT Expenditure'}
+                </h3>
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">Audit Protocol V3.0</p>
               </div>
               <button onClick={() => setView('landing')} className="p-2 hover:bg-slate-100 rounded-full transition-all text-slate-500">
@@ -235,29 +254,85 @@ export default function BillingManagement({
               const formData = new FormData(e.currentTarget);
               const data = Object.fromEntries(formData.entries());
               
+              const fileToBase64 = (file: File): Promise<string> => {
+                return new Promise((resolve, reject) => {
+                  const reader = new FileReader();
+                  reader.readAsDataURL(file);
+                  reader.onload = () => resolve(reader.result as string);
+                  reader.onerror = error => reject(error);
+                });
+              };
+
+              const invoiceFile = data.invoice_file as File;
+              const poFile = data.po_file as File;
+              
+              let billUrl = editingRecord?.bill_url;
+              let billFileName = editingRecord?.bill_file_name;
+              if (invoiceFile && invoiceFile.size > 0) {
+                try {
+                  billUrl = await fileToBase64(invoiceFile);
+                  billFileName = invoiceFile.name;
+                } catch (err) {
+                  console.error("Error reading invoice file:", err);
+                  alert("Failed to read invoice file. Please try again.");
+                  return;
+                }
+              }
+
+              let poUrl = editingRecord?.po_url;
+              let poFileName = editingRecord?.po_file_name;
+              if (poFile && poFile.size > 0) {
+                try {
+                  poUrl = await fileToBase64(poFile);
+                  poFileName = poFile.name;
+                } catch (err) {
+                  console.error("Error reading PO file:", err);
+                  alert("Failed to read PO file. Please try again.");
+                  return;
+                }
+              }
+              
+              delete data.invoice_file;
+              delete data.po_file;
+              
               const isPredefined = selectedVendorId.startsWith('b');
               const vendorName = isPredefined ? vendors.find(v => v.id === selectedVendorId)?.name : (selectedVendorId === 'other' ? manualVendorName : undefined);
 
+              const recordData = {
+                ...data,
+                service_start_date: data.service_start_date || null,
+                vendor_id: data.vendor_id,
+                manual_vendor_name: vendorName,
+                amount: Number(baseAmount) || 0,
+                gst_rate: gstType === 'CGST + SGST' ? (Number(cgstRate) || 0) + (Number(sgstRate) || 0) : (Number(gstRate) || 0),
+                cgst_rate: gstType === 'CGST + SGST' ? Number(cgstRate) : undefined,
+                sgst_rate: gstType === 'CGST + SGST' ? Number(sgstRate) : undefined,
+                gst_type: gstType,
+                gst_amount: gstAmount,
+                total_amount: totalAmount,
+                payment_status: data.payment_status || 'Pending',
+                bill_url: billUrl,
+                bill_file_name: billFileName,
+                po_url: poUrl,
+                po_file_name: poFileName,
+              };
+
               try {
-                await onAddRecord({
-                  ...data,
-                  service_start_date: data.service_start_date || null,
-                  vendor_id: null, // Set to null since these are not from the main vendors table
-                  manual_vendor_name: vendorName,
-                  amount: Number(baseAmount) || 0,
-                  gst_rate: gstType === 'CGST + SGST' ? (Number(cgstRate) || 0) + (Number(sgstRate) || 0) : (Number(gstRate) || 0),
-                  cgst_rate: gstType === 'CGST + SGST' ? Number(cgstRate) : undefined,
-                  sgst_rate: gstType === 'CGST + SGST' ? Number(sgstRate) : undefined,
-                  gst_type: gstType,
-                  gst_amount: gstAmount,
-                  total_amount: totalAmount,
-                  payment_status: data.payment_status || 'Pending'
-                });
+                if (view === 'edit' && editingRecord && onUpdateRecord) {
+                  await onUpdateRecord(editingRecord.id, recordData);
+                  alert('Billing record updated successfully!');
+                } else {
+                  await onAddRecord(recordData);
+                  alert('Billing record added successfully!');
+                }
                 setView('records');
-                alert('Billing record added successfully!');
               } catch (error: any) {
-                console.error('Failed to add billing record:', error);
-                alert('Failed to add billing record: ' + (error.message || 'Unknown error'));
+                console.error('Failed to save billing record:', error);
+                if (error.message?.includes('vendor_id') && error.message?.includes('not-null constraint')) {
+                  alert('Failed to save: The vendor_id column in Supabase must be nullable. Please update your Supabase schema to allow null values for vendor_id.');
+                } else {
+                  alert('Failed to save billing record: ' + (error.message || 'Unknown error'));
+                }
               }
             }} className="space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -296,24 +371,28 @@ export default function BillingManagement({
 
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Service Type *</label>
-                    <input name="service_type" required placeholder="e.g. Cloud Hosting, Software License" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 font-medium focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all" />
+                    <input name="service_type" defaultValue={editingRecord?.service_type} required placeholder="e.g. Cloud Hosting, Software License" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 font-medium focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all" />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Billing Date *</label>
-                      <input name="bill_date" type="date" required className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 font-medium focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all" />
+                      <input name="bill_date" type="date" defaultValue={editingRecord?.bill_date} required className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 font-medium focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all" />
                     </div>
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Payment Status</label>
                       <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-200">
                         <label className="flex-1 cursor-pointer">
-                          <input type="radio" name="payment_status" value="Paid" className="sr-only peer" />
+                          <input type="radio" name="payment_status" value="Paid" defaultChecked={editingRecord?.payment_status === 'Paid'} className="sr-only peer" />
                           <div className="py-2 text-center text-[10px] font-black uppercase rounded-lg text-slate-500 peer-checked:bg-emerald-500 peer-checked:text-white transition-all">Paid</div>
                         </label>
                         <label className="flex-1 cursor-pointer">
-                          <input type="radio" name="payment_status" value="PO Pending" defaultChecked className="sr-only peer" />
+                          <input type="radio" name="payment_status" value="PO Pending" defaultChecked={editingRecord?.payment_status === 'PO Pending'} className="sr-only peer" />
                           <div className="py-2 text-center text-[10px] font-black uppercase rounded-lg text-slate-500 peer-checked:bg-amber-500 peer-checked:text-white transition-all">PO Pending</div>
+                        </label>
+                        <label className="flex-1 cursor-pointer">
+                          <input type="radio" name="payment_status" value="Pending" defaultChecked={!editingRecord || editingRecord.payment_status === 'Pending'} className="sr-only peer" />
+                          <div className="py-2 text-center text-[10px] font-black uppercase rounded-lg text-slate-500 peer-checked:bg-slate-500 peer-checked:text-white transition-all">Pending</div>
                         </label>
                       </div>
                     </div>
@@ -324,7 +403,7 @@ export default function BillingManagement({
                 <div className="space-y-6">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Invoice Number *</label>
-                    <input name="invoice_number" required placeholder="e.g. INV-2024-001" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 font-medium focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all" />
+                    <input name="invoice_number" defaultValue={editingRecord?.invoice_number} required placeholder="e.g. INV-2024-001" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 font-medium focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all" />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -419,9 +498,21 @@ export default function BillingManagement({
                     <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center group-hover:bg-blue-500 group-hover:text-white transition-all text-slate-600">
                       <Upload className="w-5 h-5" />
                     </div>
-                    <p className="text-xs font-black text-slate-700 uppercase tracking-widest">Prominent Upload</p>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase">Click to select Invoice copy</p>
-                    <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" />
+                    <p className="text-xs font-black text-slate-700 uppercase tracking-widest">
+                      {editingRecord?.bill_file_name || 'Prominent Upload'}
+                    </p>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase">
+                      {editingRecord?.bill_url ? 'Click to replace Invoice copy' : 'Click to select Invoice copy'}
+                    </p>
+                    <input type="file" name="invoice_file" accept=".pdf,.jpg,.jpeg,.png" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const p = e.target.previousElementSibling as HTMLElement;
+                        if (p && p.previousElementSibling) {
+                          (p.previousElementSibling as HTMLElement).innerText = file.name;
+                        }
+                      }
+                    }} />
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -430,16 +521,28 @@ export default function BillingManagement({
                     <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center group-hover:bg-purple-500 group-hover:text-white transition-all text-slate-600">
                       <FileCheck className="w-5 h-5" />
                     </div>
-                    <p className="text-xs font-black text-slate-700 uppercase tracking-widest">Attach Purchase Order</p>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase">Click to select PO document</p>
-                    <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" />
+                    <p className="text-xs font-black text-slate-700 uppercase tracking-widest">
+                      {editingRecord?.po_file_name || 'Attach Purchase Order'}
+                    </p>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase">
+                      {editingRecord?.po_url ? 'Click to replace PO document' : 'Click to select PO document'}
+                    </p>
+                    <input type="file" name="po_file" accept=".pdf,.jpg,.jpeg,.png" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const p = e.target.previousElementSibling as HTMLElement;
+                        if (p && p.previousElementSibling) {
+                          (p.previousElementSibling as HTMLElement).innerText = file.name;
+                        }
+                      }
+                    }} />
                   </div>
                 </div>
               </div>
 
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Internal Remarks</label>
-                <textarea name="remarks" rows={3} placeholder="Context or escalation notes for the sourcing team..." className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 font-medium focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all resize-none" />
+                <textarea name="remarks" defaultValue={editingRecord?.remarks} rows={3} placeholder="Context or escalation notes for the sourcing team..." className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 font-medium focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all resize-none" />
               </div>
 
               <div className="flex gap-4 pt-4">
@@ -456,7 +559,7 @@ export default function BillingManagement({
                   className="flex-[2] flex items-center justify-center gap-2 px-6 py-4 bg-blue-600 text-white font-black rounded-xl hover:bg-blue-700 transition-all text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20"
                 >
                   <FileText className="w-4 h-4" />
-                  Commit to Database
+                  {view === 'edit' ? 'Update Database' : 'Commit to Database'}
                 </button>
               </div>
             </form>
@@ -479,6 +582,7 @@ export default function BillingManagement({
                     <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">GST</th>
                     <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Total Payable</th>
                     <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Status</th>
+                    <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Documents</th>
                     <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Actions</th>
                   </tr>
                 </thead>
@@ -520,16 +624,53 @@ export default function BillingManagement({
                             {statusInfo.label}
                           </span>
                         </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col gap-1.5">
+                            {record.bill_url ? (
+                              <button 
+                                onClick={() => setViewingDoc({ url: record.bill_url!, title: 'Invoice Document' })}
+                                className="inline-flex items-center gap-1.5 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-blue-600 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 transition-colors w-fit max-w-[120px]"
+                                title={record.bill_file_name || 'View Invoice'}
+                              >
+                                <FileText className="w-3 h-3 shrink-0" /> 
+                                <span className="truncate">{record.bill_file_name || 'Invoice'}</span>
+                              </button>
+                            ) : (
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">No Invoice</span>
+                            )}
+                            {record.po_url ? (
+                              <button 
+                                onClick={() => setViewingDoc({ url: record.po_url!, title: 'Purchase Order' })}
+                                className="inline-flex items-center gap-1.5 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-purple-600 bg-purple-50 hover:bg-purple-100 rounded border border-purple-200 transition-colors w-fit max-w-[120px]"
+                                title={record.po_file_name || 'View PO'}
+                              >
+                                <FileCheck className="w-3 h-3 shrink-0" /> 
+                                <span className="truncate">{record.po_file_name || 'PO'}</span>
+                              </button>
+                            ) : (
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">No PO</span>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
                             {record.payment_status !== 'Paid' && (
-                              <button 
-                                onClick={() => onUpdateStatus(record.id, 'Paid')}
-                                className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
-                                title="Mark as Paid"
-                              >
-                                <CheckCircle2 className="w-4 h-4" />
-                              </button>
+                              <>
+                                <button 
+                                  onClick={() => handleEdit(record)}
+                                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                                  title="Edit Record"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                <button 
+                                  onClick={() => onUpdateStatus(record.id, 'Paid')}
+                                  className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
+                                  title="Mark as Paid"
+                                >
+                                  <CheckCircle2 className="w-4 h-4" />
+                                </button>
+                              </>
                             )}
                             <div className="flex gap-1">
                               <button 
@@ -539,16 +680,6 @@ export default function BillingManagement({
                               >
                                 <Download className="w-4 h-4" />
                               </button>
-                              {record.bill_url && (
-                                <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="View Invoice">
-                                  <FileText className="w-4 h-4" />
-                                </button>
-                              )}
-                              {record.po_url && (
-                                <button className="p-2 text-purple-600 hover:bg-purple-50 rounded-xl transition-all" title="View PO">
-                                  <FileCheck className="w-4 h-4" />
-                                </button>
-                              )}
                             </div>
                           </div>
                         </td>
@@ -557,7 +688,7 @@ export default function BillingManagement({
                   })}
                   {filteredRecords.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-6 py-20 text-center">
+                      <td colSpan={8} className="px-6 py-20 text-center">
                         <div className="flex flex-col items-center justify-center gap-2 text-slate-400">
                           <Calculator className="w-10 h-10 opacity-20" />
                           <p className="text-xs font-black uppercase tracking-widest">No billing records found</p>
@@ -568,6 +699,60 @@ export default function BillingManagement({
                 </tbody>
               </table>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Document Viewing Modal */}
+      <AnimatePresence>
+        {viewingDoc && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden"
+            >
+              <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
+                <h3 className="text-lg font-black text-slate-900 uppercase tracking-widest">
+                  {viewingDoc.title}
+                </h3>
+                <button
+                  onClick={() => setViewingDoc(null)}
+                  className="p-2 hover:bg-slate-200 rounded-full transition-all text-slate-500"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-auto p-4 bg-slate-100/50 flex items-center justify-center min-h-[50vh]">
+                {viewingDoc.url.startsWith('data:image/') ? (
+                  <img 
+                    src={viewingDoc.url} 
+                    alt={viewingDoc.title}
+                    className="max-w-full max-h-full object-contain rounded-lg shadow-sm"
+                  />
+                ) : viewingDoc.url.startsWith('data:application/pdf') ? (
+                  <iframe 
+                    src={viewingDoc.url} 
+                    className="w-full h-full min-h-[70vh] rounded-lg shadow-sm border-0"
+                    title={viewingDoc.title}
+                  />
+                ) : (
+                  <div className="text-center space-y-4">
+                    <FileText className="w-16 h-16 text-slate-300 mx-auto" />
+                    <p className="text-slate-500 font-medium">
+                      Document format not supported for direct viewing.<br/>
+                      <a href={viewingDoc.url} download className="text-blue-600 hover:underline">Click here to download</a>
+                    </p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
